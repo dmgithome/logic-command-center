@@ -6,8 +6,18 @@ export interface LogicManifest {
   project: ProjectInfo;
   modules: Module[];
   data_models: DataModel[];
+
+  // 兼容旧 manifest / 扩展字段（viewer 只用到 id/name）
+  entities?: Entity[];
+
   glossary: Record<string, GlossaryEntry>;
   changelog: ChangelogEntry[];
+}
+
+export interface Entity {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 export interface ProjectInfo {

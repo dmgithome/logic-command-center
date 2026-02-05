@@ -94,8 +94,8 @@ export function generateProjectMindmap(manifest: LogicManifest): string {
     }
   }
 
-  // 实体
-  if (manifest.entities.length > 0) {
+  // 实体（可选）
+  if (manifest.entities && manifest.entities.length > 0) {
     lines.push('    实体');
     for (const e of manifest.entities) {
       lines.push(`      ${escapeMindmapText(e.name)} (${escapeMindmapText(e.id)})`);
