@@ -1,0 +1,145 @@
+{
+  "id": "unreturn",
+  "name": "未归还管理",
+  "description": "追踪和管理未归还的耗材，包括超时提醒、催还通知",
+  "flows": [
+    {
+      "id": "unreturn.scan",
+      "name": "扫描未归还",
+      "description": "扫描超期未归还耗材",
+      "steps": [
+        {
+          "id": "unreturn.scan_s1",
+          "order": 1,
+          "name": "查询借出记录"
+        },
+        {
+          "id": "unreturn.scan_s2",
+          "order": 2,
+          "name": "计算超期时间"
+        },
+        {
+          "id": "unreturn.scan_s3",
+          "order": 3,
+          "name": "标记未归还"
+        }
+      ]
+    },
+    {
+      "id": "unreturn.notify",
+      "name": "催还通知",
+      "description": "发送催还通知",
+      "steps": [
+        {
+          "id": "unreturn.notify_s1",
+          "order": 1,
+          "name": "筛选超期记录"
+        },
+        {
+          "id": "unreturn.notify_s2",
+          "order": 2,
+          "name": "生成通知内容"
+        },
+        {
+          "id": "unreturn.notify_s3",
+          "order": 3,
+          "name": "发送通知"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "unreturn.r1",
+      "name": "超期判定",
+      "description": "借出超过允许时长",
+      "priority": "medium",
+      "condition": "borrowDays > allowDays",
+      "effect": "标记未归还"
+    },
+    {
+      "id": "unreturn.r2",
+      "name": "自动扣费",
+      "description": "超期达到阈值自动扣费",
+      "priority": "medium",
+      "condition": "overdueDays >= chargeThreshold",
+      "effect": "计入费用"
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "unreturn.sm1",
+      "name": "借用状态机",
+      "entity": "borrow",
+      "field": "status",
+      "states": [
+        {
+          "id": "borrowed",
+          "name": "borrowed"
+        },
+        {
+          "id": "overdue",
+          "name": "overdue"
+        },
+        {
+          "id": "returned",
+          "name": "returned"
+        },
+        {
+          "id": "charged",
+          "name": "charged"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "borrowed",
+          "to": "overdue",
+          "trigger": "timeout"
+        },
+        {
+          "from": "borrowed",
+          "to": "returned",
+          "trigger": "return"
+        },
+        {
+          "from": "overdue",
+          "to": "charged",
+          "trigger": "charge"
+        }
+      ]
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "unreturn.p1",
+      "name": "scanUnreturned",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "borrows = Borrow.findActive()",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "for borrow in borrows:",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "if borrow.isOverdue(): borrow.markOverdue()",
+          "type": "condition"
+        }
+      ],
+      "calls": [
+        {
+          "name": "findActive",
+          "type": "db"
+        },
+        {
+          "name": "markOverdue",
+          "type": "db"
+        }
+      ]
+    }
+  ]
+}

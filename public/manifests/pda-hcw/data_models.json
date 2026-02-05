@@ -1,0 +1,125 @@
+{
+  "data_models": [
+    {
+      "id": "UserInfo",
+      "name": "用户信息",
+      "description": "登录用户的基本信息",
+      "code_ref": {"file": "app/src/main/java/com/pda/hcw/UserInfo.java"},
+      "fields": [
+        {"name": "userId", "type": "String", "description": "用户ID"},
+        {"name": "username", "type": "String", "description": "用户名"},
+        {"name": "realName", "type": "String", "description": "真实姓名"},
+        {"name": "department", "type": "String", "description": "部门"},
+        {"name": "role", "type": "UserRole", "description": "角色枚举"},
+        {"name": "token", "type": "String", "description": "认证令牌"},
+        {"name": "sessionId", "type": "String", "description": "会话ID"},
+        {"name": "nfcCardId", "type": "String", "description": "NFC卡号（可选）"},
+        {"name": "isBackdoorAccount", "type": "boolean", "description": "是否后门账户"}
+      ]
+    },
+    {
+      "id": "ConsumableItem",
+      "name": "耗材项",
+      "description": "单个耗材的详细信息",
+      "code_ref": {"file": "app/src/main/java/com/pda/hcw/ConsumableItem.java"},
+      "fields": [
+        {"name": "rfid", "type": "String", "description": "RFID标签（18位）"},
+        {"name": "barcode", "type": "String", "description": "条码"},
+        {"name": "code", "type": "String", "description": "商品编号/子码"},
+        {"name": "name", "type": "String", "description": "商品名称"},
+        {"name": "spec", "type": "String", "description": "规格"},
+        {"name": "manufacturer", "type": "String", "description": "生产厂家"},
+        {"name": "brand", "type": "String", "description": "品牌"},
+        {"name": "unit", "type": "String", "description": "单位"},
+        {"name": "batch", "type": "String", "description": "批号"},
+        {"name": "expiryDate", "type": "String", "description": "有效期"},
+        {"name": "currentLocationId", "type": "int", "description": "当前位置ID"},
+        {"name": "currentLocationName", "type": "String", "description": "当前位置名称"}
+      ]
+    },
+    {
+      "id": "CheckoutRecord",
+      "name": "出库记录",
+      "description": "本地持久化的取用/归还记录",
+      "code_ref": {"file": "app/src/main/java/com/pda/hcw/CheckoutRecord.java"},
+      "fields": [
+        {"name": "recordId", "type": "String", "description": "本地记录ID"},
+        {"name": "serverRecordId", "type": "int", "description": "服务端记录ID"},
+        {"name": "checkoutTime", "type": "long", "description": "操作时间戳"},
+        {"name": "operatingRoom", "type": "String", "description": "术间名称"},
+        {"name": "totalQuantity", "type": "int", "description": "总数量"},
+        {"name": "operator", "type": "String", "description": "操作员姓名"},
+        {"name": "operatorUserId", "type": "String", "description": "操作员ID"},
+        {"name": "recordType", "type": "String", "description": "记录类型：checkout/return"},
+        {"name": "items", "type": "List<ConsumableItem>", "description": "耗材明细列表"}
+      ]
+    },
+    {
+      "id": "InventoryTask",
+      "name": "盘点任务",
+      "description": "盘点任务的基本信息",
+      "code_ref": {"file": "app/src/main/java/com/pda/hcw/InventoryTask.java"},
+      "fields": [
+        {"name": "taskId", "type": "int", "description": "任务ID"},
+        {"name": "taskName", "type": "String", "description": "任务名称"},
+        {"name": "status", "type": "String", "description": "状态：running/closed/review"},
+        {"name": "totalCount", "type": "int", "description": "计划总数"},
+        {"name": "scannedCount", "type": "int", "description": "已扫描数"},
+        {"name": "createTime", "type": "String", "description": "创建时间"}
+      ]
+    },
+    {
+      "id": "InventorySession",
+      "name": "盘点会话",
+      "description": "内存态的盘点会话，管理计划集和已盘集",
+      "code_ref": {"file": "app/src/main/java/com/pda/hcw/inventory/InventorySession.java"},
+      "fields": [
+        {"name": "taskId", "type": "int", "description": "关联的任务ID"},
+        {"name": "allPlanned", "type": "Set<String>", "description": "计划内RFID集合"},
+        {"name": "plannedByRoom", "type": "Map<String,Set<String>>", "description": "按地点分组的计划集"},
+        {"name": "countedAll", "type": "Set<String>", "description": "已盘RFID集合"},
+        {"name": "countedByRoom", "type": "Map<String,Set<String>>", "description": "按地点分组的已盘集"},
+        {"name": "surplus", "type": "Set<String>", "description": "盈余RFID集合"},
+        {"name": "seen", "type": "Set<String>", "description": "本轮已见RFID（去重用）"}
+      ]
+    },
+    {
+      "id": "InboundOrder",
+      "name": "入库单",
+      "description": "待上架的入库单据",
+      "fields": [
+        {"name": "code", "type": "String", "description": "单据编号"},
+        {"name": "total", "type": "int", "description": "总数量"},
+        {"name": "accepted", "type": "int", "description": "已上架数量"},
+        {"name": "rpNameTo", "type": "String", "description": "目标仓库名称"},
+        {"name": "plannedRfids", "type": "Set<String>", "description": "待上架RFID集合"},
+        {"name": "details", "type": "List<InboundOrderDetail>", "description": "明细列表"}
+      ]
+    },
+    {
+      "id": "OperatingRoom",
+      "name": "地点/术间",
+      "description": "地点信息，包括中心库和术间",
+      "code_ref": {"file": "app/src/main/java/com/pda/hcw/OperatingRoom.java"},
+      "fields": [
+        {"name": "serverId", "type": "int", "description": "服务端ID"},
+        {"name": "name", "type": "String", "description": "名称"},
+        {"name": "type", "type": "String", "description": "类型：center/room"},
+        {"name": "isActive", "type": "boolean", "description": "是否启用"}
+      ]
+    },
+    {
+      "id": "LocationSummary",
+      "name": "地点汇总",
+      "description": "盘点时的地点统计卡片",
+      "code_ref": {"file": "app/src/main/java/com/pda/hcw/LocationSummary.java"},
+      "fields": [
+        {"name": "roomId", "type": "String", "description": "地点ID"},
+        {"name": "roomName", "type": "String", "description": "地点名称"},
+        {"name": "plannedCount", "type": "int", "description": "计划数"},
+        {"name": "countedCount", "type": "int", "description": "已盘数"},
+        {"name": "missingCount", "type": "int", "description": "缺失数"}
+      ]
+    }
+  ]
+}

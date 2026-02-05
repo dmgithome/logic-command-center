@@ -1,0 +1,326 @@
+{
+  "id": "inventory_task",
+  "name": "库存盘点",
+  "description": "库存盘点任务管理，支持创建盘点任务、扫描盘点、差异处理",
+  "tags": [
+    "核心",
+    "盘点"
+  ],
+  "dependencies": [
+    "stock"
+  ],
+  "code_refs": [
+    {
+      "file": "scripts/hv3/stock/inventory_task.js"
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow_create_inventory_task",
+      "name": "创建盘点任务",
+      "description": "创建盘点任务并生成明细快照",
+      "trigger": "用户发起盘点",
+      "steps": [
+        {
+          "id": "step1",
+          "order": 1,
+          "name": "未完成任务检查",
+          "description": "检查是否存在未完成的盘点任务",
+          "rules": [
+            "rule_single_task"
+          ]
+        },
+        {
+          "id": "step2",
+          "order": 2,
+          "name": "参数校验",
+          "description": "校验operatingRoomIDs不为空"
+        },
+        {
+          "id": "step3",
+          "order": 3,
+          "name": "获取地点信息",
+          "description": "查询地点表获取地点名称"
+        },
+        {
+          "id": "step4",
+          "order": 4,
+          "name": "创建任务头",
+          "description": "生成任务号并创建任务记录"
+        },
+        {
+          "id": "step5",
+          "order": 5,
+          "name": "生成明细快照",
+          "description": "分批查询库存并写入盘点明细表",
+          "rules": [
+            "rule_participate_inventory"
+          ]
+        },
+        {
+          "id": "step6",
+          "order": 6,
+          "name": "更新计划数量",
+          "description": "回写plannedCount到任务头"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/inventory_task.js",
+        "function": "createTask",
+        "line": 147
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule_single_task",
+      "name": "单任务限制规则",
+      "description": "同一时间只能存在一个未完成的盘点任务",
+      "priority": "high",
+      "category": "校验",
+      "constraints": [
+        "不存在status为draft/running/review的任务"
+      ],
+      "effects": [
+        "若存在则拒绝创建新任务"
+      ],
+      "affects": {
+        "entities": [
+          "inventory_task"
+        ],
+        "operations": [
+          "C"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/inventory_task.js",
+        "line": 161
+      },
+      "condition": "不存在status为draft/running/review的任务",
+      "effect": "若存在则拒绝创建新任务"
+    },
+    {
+      "id": "rule_participate_inventory",
+      "name": "参与盘点规则",
+      "description": "根据字典配置决定耗材是否参与盘点",
+      "priority": "medium",
+      "category": "过滤",
+      "constraints": [
+        "查询字典表的participateInventory字段",
+        "默认参与盘点"
+      ],
+      "effects": [
+        "participateInventory=false的耗材不生成盘点明细"
+      ],
+      "affects": {
+        "entities": [
+          "dictionary",
+          "inventory_task_detail"
+        ],
+        "operations": [
+          "R",
+          "C"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/inventory_task.js",
+        "line": 343
+      },
+      "condition": "查询字典表的participateInventory字段 && 默认参与盘点",
+      "effect": "participateInventory=false的耗材不生成盘点明细"
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "sm_inventory_task_status",
+      "name": "盘点任务状态机",
+      "description": "盘点任务的状态流转",
+      "entity": "inventory_task",
+      "field": "status",
+      "states": [
+        {
+          "id": "draft",
+          "name": "草稿",
+          "description": "任务已创建，未开始盘点",
+          "is_initial": true
+        },
+        {
+          "id": "running",
+          "name": "进行中",
+          "description": "正在执行盘点"
+        },
+        {
+          "id": "review",
+          "name": "待审核",
+          "description": "盘点完成，等待审核"
+        },
+        {
+          "id": "completed",
+          "name": "已完成",
+          "description": "盘点已审核通过",
+          "is_final": true
+        },
+        {
+          "id": "canceled",
+          "name": "已取消",
+          "description": "任务已取消",
+          "is_final": true
+        }
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "running",
+          "trigger": "开始盘点",
+          "description": "用户开始执行盘点"
+        },
+        {
+          "from": "draft",
+          "to": "canceled",
+          "trigger": "取消",
+          "description": "取消任务"
+        },
+        {
+          "from": "running",
+          "to": "review",
+          "trigger": "提交审核",
+          "description": "盘点完成提交审核"
+        },
+        {
+          "from": "running",
+          "to": "canceled",
+          "trigger": "作废",
+          "description": "作废进行中的任务"
+        },
+        {
+          "from": "review",
+          "to": "completed",
+          "trigger": "审核通过",
+          "description": "审核通过完成盘点"
+        },
+        {
+          "from": "review",
+          "to": "running",
+          "trigger": "打回",
+          "description": "审核打回重新盘点"
+        }
+      ]
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "pc_create_inventory_task",
+      "name": "创建盘点任务",
+      "description": "创建盘点任务并生成明细快照的完整流程",
+      "params": [
+        "payload: {taskName, operatingRoomIDs, remark, userID, inventoryStatusList}"
+      ],
+      "returns": "任务信息 {taskId, plannedCount}",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "// 创建盘点任务",
+          "type": "comment"
+        },
+        {
+          "indent": 0,
+          "text": "检查是否存在未完成的盘点任务(draft/running/review)",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "若存在 → 返回错误，提示先完成或作废",
+          "type": "error"
+        },
+        {
+          "indent": 0,
+          "text": "校验 operatingRoomIDs 不为空",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "分批查询地点表获取地点名称",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "生成盘点任务号 PD + YYYYMMDDHHmmss + 毫秒 + 随机数",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "创建任务头记录（status=draft）",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "分地点、分页查询库存表",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "按字典表participateInventory过滤",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "批量插入盘点明细快照",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "回写plannedCount到任务头",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "返回任务创建结果",
+          "type": "return"
+        }
+      ],
+      "calls": [
+        {
+          "name": "盘点任务表.查询未完成",
+          "type": "db",
+          "table": "inventory_task",
+          "description": "检查是否有未完成任务"
+        },
+        {
+          "name": "地点表.批量查询",
+          "type": "db",
+          "table": "locations",
+          "description": "获取地点名称"
+        },
+        {
+          "name": "盘点任务表.创建",
+          "type": "db",
+          "table": "inventory_task",
+          "description": "创建任务头"
+        },
+        {
+          "name": "库存表.分页查询",
+          "type": "db",
+          "table": "inventory",
+          "description": "查询库存生成快照"
+        },
+        {
+          "name": "字典表.批量查询",
+          "type": "db",
+          "table": "AllConsumablesDictionary",
+          "description": "获取participateInventory配置"
+        },
+        {
+          "name": "盘点明细表.批量插入",
+          "type": "db",
+          "table": "inventory_task_detail",
+          "description": "插入盘点明细快照"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/inventory_task.js",
+        "function": "createTask",
+        "line": 147
+      }
+    }
+  ]
+}

@@ -5,7 +5,6 @@ export interface LogicManifest {
   $schema: string;
   project: ProjectInfo;
   modules: Module[];
-  entities: Entity[];
   data_models: DataModel[];
   glossary: Record<string, GlossaryEntry>;
   changelog: ChangelogEntry[];
@@ -124,30 +123,6 @@ export interface ApiCall {
   description?: string;
 }
 
-// ============ 业务实体 ============
-export interface Entity {
-  id: string;
-  name: string;
-  description: string;
-  models: string[];
-  key_fields: EntityField[];
-  statuses?: EntityStatus[];
-}
-
-export interface EntityField {
-  name: string;
-  label: string;
-  description: string;
-  source: string;
-  constraints?: string[];
-}
-
-export interface EntityStatus {
-  value: string;
-  label: string;
-  description?: string;
-}
-
 // ============ 数据模型 ============
 export interface DataModel {
   id: string;
@@ -196,5 +171,5 @@ export interface ChangelogEntry {
 }
 
 // ============ 视图相关类型 ============
-export type NavType = 'overview' | 'modules' | 'entities' | 'models' | 'glossary' | 'changelog';
+export type NavType = 'overview' | 'modules' | 'models' | 'glossary' | 'changelog';
 export type ModuleTab = 'flows' | 'rules' | 'state_machines' | 'pseudocodes' | 'code_refs';

@@ -1,0 +1,27 @@
+{
+  "id": "dictionary",
+  "name": "耗材字典",
+  "description": "耗材字典管理，包含耗材基础信息、规格、厂家等",
+  "tags": [
+    "基础数据"
+  ],
+  "code_refs": [
+    {
+      "file": "scripts/hv3/dictionary/"
+    }
+  ],
+  "flows": [],
+  "rules": [
+    {
+      "id": "rule_dict_priority",
+      "name": "字典优先原则",
+      "description": "在耗材信息查询时，本地字典的优先级高于SPD查询",
+      "priority": "high",
+      "category": "业务规则",
+      "condition": "true",
+      "effect": "execute"
+    }
+  ],
+  "state_machines": [],
+  "pseudocodes": []
+}

@@ -1,0 +1,183 @@
+{
+  "id": "stock",
+  "name": "库存查询",
+  "description": "库存信息查询、效期管理、字典关联",
+  "tags": [
+    "核心",
+    "库存"
+  ],
+  "dependencies": [
+    "dictionary"
+  ],
+  "code_refs": [
+    {
+      "file": "scripts/hv3/stock/stock.js"
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow_get_stock",
+      "name": "库存查询",
+      "description": "支持按子码、批次、RFID查询库存",
+      "trigger": "用户查询库存",
+      "steps": [
+        {
+          "id": "step1",
+          "order": 1,
+          "name": "参数校验",
+          "description": "校验searchType和分页参数"
+        },
+        {
+          "id": "step2",
+          "order": 2,
+          "name": "构建查询条件",
+          "description": "根据参数构建查询条件"
+        },
+        {
+          "id": "step3",
+          "order": 3,
+          "name": "查询库存",
+          "description": "从库存表查询数据"
+        },
+        {
+          "id": "step4",
+          "order": 4,
+          "name": "计算耗材状态",
+          "description": "根据效期和字典状态计算type字段",
+          "rules": [
+            "rule_generate_type"
+          ]
+        },
+        {
+          "id": "step5",
+          "order": 5,
+          "name": "贴合地点名称",
+          "description": "批量查询地点表获取名称"
+        },
+        {
+          "id": "step6",
+          "order": 6,
+          "name": "分组聚合",
+          "description": "按searchType进行分组聚合"
+        },
+        {
+          "id": "step7",
+          "order": 7,
+          "name": "排序分页",
+          "description": "按指定字段排序并分页返回"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/stock.js",
+        "function": "getStock",
+        "line": 275
+      }
+    },
+    {
+      "id": "flow_update_expiry_status",
+      "name": "效期状态更新",
+      "description": "批量更新库存的效期状态",
+      "trigger": "定时任务/入库后",
+      "steps": [
+        {
+          "id": "step1",
+          "order": 1,
+          "name": "加载配置",
+          "description": "加载效期预警配置和默认预警天数"
+        },
+        {
+          "id": "step2",
+          "order": 2,
+          "name": "分批查询库存",
+          "description": "使用游标分页查询在库库存"
+        },
+        {
+          "id": "step3",
+          "order": 3,
+          "name": "计算效期状态",
+          "description": "根据expiryDate和预警天数计算状态",
+          "rules": [
+            "rule_expiry_status"
+          ]
+        },
+        {
+          "id": "step4",
+          "order": 4,
+          "name": "批量更新",
+          "description": "更新expiryStatus和nearExpiryDays字段"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/stock.js",
+        "function": "updateExpiryStatus",
+        "line": 111
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule_generate_type",
+      "name": "耗材状态计算规则",
+      "description": "根据效期状态和字典状态计算耗材显示类型",
+      "priority": "medium",
+      "category": "计算",
+      "effects": [
+        "type='SPD系统已停用': dictionary.dictionaryStatus=stop",
+        "type='效期预警'或'已过期': expiryStatus!=normal",
+        "type='正常': 其他情况"
+      ],
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "fields": [
+          "type"
+        ],
+        "operations": [
+          "R"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/stock.js",
+        "line": 308
+      },
+      "condition": "true",
+      "effect": "type='SPD系统已停用': dictionary.dictionaryStatus=stop; type='效期预警'或'已过期': expiryStatus!=normal; type='正常': 其他情况"
+    },
+    {
+      "id": "rule_expiry_status",
+      "name": "效期状态计算规则",
+      "description": "根据有效期计算效期状态",
+      "priority": "high",
+      "category": "计算",
+      "constraints": [
+        "有效期必须是有效日期格式"
+      ],
+      "effects": [
+        "expired: 剩余天数<0",
+        "nearExpiry: 剩余天数<=预警天数",
+        "normal: 其他"
+      ],
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "fields": [
+          "expiryStatus",
+          "nearExpiryDays"
+        ],
+        "operations": [
+          "U"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/stock.js",
+        "line": 184
+      },
+      "condition": "有效期必须是有效日期格式",
+      "effect": "expired: 剩余天数<0; nearExpiry: 剩余天数<=预警天数; normal: 其他"
+    }
+  ],
+  "state_machines": [],
+  "pseudocodes": []
+}

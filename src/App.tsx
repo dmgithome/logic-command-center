@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type {
   LogicManifest,
   Module,
-  Entity,
   DataModel,
   Flow,
   Rule,
@@ -327,39 +326,6 @@ function ModuleDetail({ module }: { module: Module }) {
   );
 }
 
-// ============ 实体详情 ============
-function EntityDetail({ entity }: { entity: Entity }) {
-  return (
-    <div className="p-4 space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">{entity.name}</h2>
-        <p className="text-sm text-slate-500 mt-1">{entity.description}</p>
-      </div>
-      {entity.statuses && (
-        <div>
-          <div className="text-sm font-medium text-slate-500 mb-2">状态</div>
-          <div className="flex gap-2">
-            {entity.statuses.map(s => <Badge key={s.value} variant="default">{s.label}</Badge>)}
-          </div>
-        </div>
-      )}
-      <div>
-        <div className="text-sm font-medium text-slate-500 mb-2">核心字段</div>
-        <div className="border border-slate-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50"><tr><th className="text-left px-3 py-2">字段</th><th className="text-left px-3 py-2">说明</th><th className="text-left px-3 py-2">来源</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {entity.key_fields.map(f => (
-                <tr key={f.name}><td className="px-3 py-2 font-medium">{f.label}</td><td className="px-3 py-2 text-slate-600">{f.description}</td><td className="px-3 py-2"><code className="text-xs bg-slate-100 px-1 rounded">{f.source}</code></td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ============ 数据模型详情 ============
 function DataModelDetail({ model }: { model: DataModel }) {
   return (
@@ -664,7 +630,6 @@ function App() {
   const navItems: Array<{ key: NavType; label: string; icon: string }> = [
     { key: 'overview', label: '总览', icon: '🧭' },
     { key: 'modules', label: '模块', icon: '📦' },
-    { key: 'entities', label: '实体', icon: '🎯' },
     { key: 'models', label: '模型', icon: '🗄️' },
     { key: 'glossary', label: '术语', icon: '📖' },
     { key: 'changelog', label: '历史', icon: '📋' },
@@ -675,14 +640,12 @@ function App() {
     setListQuery('');
     if (!manifest) return;
     if (key === 'modules') setSelectedId(manifest.modules[0]?.id || '');
-    else if (key === 'entities') setSelectedId(manifest.entities[0]?.id || '');
     else if (key === 'models') setSelectedId(manifest.data_models[0]?.id || '');
   };
 
   const getListItems = () => {
     if (!manifest) return [];
     if (nav === 'modules') return manifest.modules.map(m => ({ id: m.id, name: m.name }));
-    if (nav === 'entities') return manifest.entities.map(e => ({ id: e.id, name: e.name }));
     if (nav === 'models') return manifest.data_models.map(d => ({ id: d.id, name: d.name }));
     return [];
   };
@@ -695,10 +658,6 @@ function App() {
     if (nav === 'modules') {
       const m = manifest.modules.find(x => x.id === selectedId);
       return m ? <ModuleDetail module={m} /> : null;
-    }
-    if (nav === 'entities') {
-      const e = manifest.entities.find(x => x.id === selectedId);
-      return e ? <EntityDetail entity={e} /> : null;
     }
     if (nav === 'models') {
       const d = manifest.data_models.find(x => x.id === selectedId);
@@ -719,8 +678,6 @@ function App() {
     if (!manifest) return;
     if (nav === 'modules') {
       if (!manifest.modules.some(m => m.id === selectedId)) setSelectedId(manifest.modules[0]?.id || '');
-    } else if (nav === 'entities') {
-      if (!manifest.entities.some(e => e.id === selectedId)) setSelectedId(manifest.entities[0]?.id || '');
     } else if (nav === 'models') {
       if (!manifest.data_models.some(d => d.id === selectedId)) setSelectedId(manifest.data_models[0]?.id || '');
     }
@@ -805,7 +762,7 @@ function App() {
       {listItems.length > 0 && (
         <aside className="w-48 bg-white border-r border-slate-200 flex flex-col">
           <div className="p-3 border-b border-slate-200 text-sm font-medium text-slate-500">
-            {nav === 'modules' ? '业务模块' : nav === 'entities' ? '业务实体' : '数据模型'}
+            {nav === 'modules' ? '业务模块' : '数据模型'}
           </div>
           <div className="p-2 border-b border-slate-200">
             <div className="flex items-center gap-2">

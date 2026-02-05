@@ -1,0 +1,44 @@
+{
+  "id": "consume",
+  "name": "消耗管理",
+  "description": "耗材消耗记录同步和状态变更",
+  "tags": [
+    "核心"
+  ],
+  "dependencies": [
+    "stock"
+  ],
+  "code_refs": [
+    {
+      "file": "scripts/hv3/consume/consume.js"
+    },
+    {
+      "file": "scripts/hv3/schedules/consume.js"
+    }
+  ],
+  "flows": [],
+  "rules": [
+    {
+      "id": "rule_consume_status",
+      "name": "消耗状态类型",
+      "description": "消耗状态分为4种：0-消耗、1-消耗退回、2-领用未消耗、3-领用退回",
+      "priority": "high",
+      "category": "业务规则",
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "fields": [
+          "status"
+        ],
+        "operations": [
+          "U"
+        ]
+      },
+      "condition": "true",
+      "effect": "execute"
+    }
+  ],
+  "state_machines": [],
+  "pseudocodes": []
+}

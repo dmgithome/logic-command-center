@@ -1,0 +1,158 @@
+{
+  "id": "expire",
+  "name": "效期管理",
+  "description": "耗材效期监控和预警，包括近效期提醒、过期处理等",
+  "flows": [
+    {
+      "id": "expire.scan",
+      "name": "效期扫描",
+      "description": "扫描所有库存效期",
+      "steps": [
+        {
+          "id": "expire.scan_s1",
+          "order": 1,
+          "name": "查询所有库存"
+        },
+        {
+          "id": "expire.scan_s2",
+          "order": 2,
+          "name": "计算剩余天数"
+        },
+        {
+          "id": "expire.scan_s3",
+          "order": 3,
+          "name": "更新效期状态"
+        }
+      ]
+    },
+    {
+      "id": "expire.alert",
+      "name": "效期预警",
+      "description": "对近效期耗材预警",
+      "steps": [
+        {
+          "id": "expire.alert_s1",
+          "order": 1,
+          "name": "筛选近效期"
+        },
+        {
+          "id": "expire.alert_s2",
+          "order": 2,
+          "name": "生成预警记录"
+        },
+        {
+          "id": "expire.alert_s3",
+          "order": 3,
+          "name": "发送通知"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "expire.r1",
+      "name": "近效期判定",
+      "description": "剩余天数低于阈值",
+      "priority": "medium",
+      "condition": "daysLeft <= alertDays",
+      "effect": "标记近效期"
+    },
+    {
+      "id": "expire.r2",
+      "name": "过期判定",
+      "description": "超过有效期",
+      "priority": "medium",
+      "condition": "today > expireDate",
+      "effect": "标记已过期"
+    },
+    {
+      "id": "expire.r3",
+      "name": "禁止出库",
+      "description": "过期耗材禁止出库",
+      "priority": "medium",
+      "condition": "item.isExpired == false",
+      "effect": "允许出库"
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "expire.sm1",
+      "name": "效期状态机",
+      "entity": "stock",
+      "field": "expire_status",
+      "states": [
+        {
+          "id": "normal",
+          "name": "normal"
+        },
+        {
+          "id": "near_expire",
+          "name": "near_expire"
+        },
+        {
+          "id": "expired",
+          "name": "expired"
+        },
+        {
+          "id": "disposed",
+          "name": "disposed"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "normal",
+          "to": "near_expire",
+          "trigger": "approach"
+        },
+        {
+          "from": "near_expire",
+          "to": "expired",
+          "trigger": "reach"
+        },
+        {
+          "from": "expired",
+          "to": "disposed",
+          "trigger": "dispose"
+        }
+      ]
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "expire.p1",
+      "name": "scanExpire",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "stocks = Stock.findAll()",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "for stock in stocks:",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "daysLeft = stock.expireDate - today",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if daysLeft <= 0: stock.markExpired()",
+          "type": "condition"
+        }
+      ],
+      "calls": [
+        {
+          "name": "findAll",
+          "type": "db"
+        },
+        {
+          "name": "markExpired",
+          "type": "db"
+        }
+      ]
+    }
+  ]
+}

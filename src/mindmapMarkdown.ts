@@ -145,37 +145,7 @@ export function generateMindmapMarkdown(manifest: LogicManifest): string {
   pushTitle(lines, 2, `模块（${manifest.modules.length}）`);
   for (const m of manifest.modules) moduleToMarkdown(lines, m);
 
-  pushTitle(lines, 2, `实体（${manifest.entities.length}）`);
-  for (const e of manifest.entities) {
-    pushTitle(lines, 3, `${mdEscape(e.name)}（${mdEscape(e.id)}）`);
-    push(lines, 0, `说明：${mdEscape(e.description)}`);
-    if (e.models && e.models.length > 0) push(lines, 0, `关联模型：${mdEscape(e.models.join('、'))}`);
-    if (e.key_fields && e.key_fields.length > 0) {
-      push(lines, 0, `核心字段（${e.key_fields.length}）`);
-      for (const f of e.key_fields) {
-        const meta = [`字段名：${f.name}`, f.source ? `来源：${f.source}` : null].filter(Boolean).join(' / ');
-        push(lines, 1, `${mdEscape(f.label)}：${mdEscape(f.description)}（${mdEscape(meta)}）`);
-      }
-    }
-    if (e.statuses && e.statuses.length > 0) {
-      push(lines, 0, `状态（${e.statuses.length}）`);
-      for (const s of e.statuses) push(lines, 1, `${mdEscape(s.label)}（${mdEscape(s.value)}）${s.description ? `：${mdEscape(s.description)}` : ''}`);
-    }
-  }
-
-  pushTitle(lines, 2, `数据模型（${manifest.data_models.length}）`);
-  for (const m of manifest.data_models) {
-    pushTitle(lines, 3, `${mdEscape(m.name)}（${mdEscape(m.table)}）`);
-    push(lines, 0, `说明：${mdEscape(m.description)}`);
-    if (m.entity) push(lines, 0, `对应实体：${mdEscape(m.entity)}`);
-    if (m.source?.file) push(lines, 0, `来源：${mdCode(m.source.file)}`);
-    if (m.fields && m.fields.length > 0) {
-      push(lines, 0, `字段（${m.fields.length}）`);
-      for (const f of m.fields) {
-        push(lines, 1, `${mdCode(`${f.name}: ${f.type}`)} - ${mdEscape(f.label)}`);
-      }
-    }
-  }
+  // 数据模型不在思维导图中展示，单独查看
 
   pushTitle(lines, 2, `术语表（${Object.keys(manifest.glossary).length}）`);
   for (const [k, v] of Object.entries(manifest.glossary)) {

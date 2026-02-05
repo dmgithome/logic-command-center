@@ -1,0 +1,512 @@
+{
+  "id": "inbound",
+  "name": "入库管理",
+  "description": "管理耗材入库流程，支持有单入库和无单入库两种模式",
+  "tags": [
+    "核心",
+    "库存"
+  ],
+  "dependencies": [
+    "spd",
+    "dictionary"
+  ],
+  "code_refs": [
+    {
+      "file": "scripts/hv3/stock/inbound.js"
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow_has_order_inbound",
+      "name": "有单入库流程",
+      "description": "根据SPD下发的待上架订单进行入库",
+      "trigger": "用户扫描耗材RFID",
+      "steps": [
+        {
+          "id": "step1",
+          "order": 1,
+          "name": "参数校验",
+          "description": "校验入库参数（items、target_location_id、bindingId）",
+          "rules": [
+            "rule_inbound_params"
+          ]
+        },
+        {
+          "id": "step2",
+          "order": 2,
+          "name": "校验入库方式",
+          "description": "检查系统配置的入库方式是否匹配",
+          "rules": [
+            "rule_inbound_method"
+          ]
+        },
+        {
+          "id": "step3",
+          "order": 3,
+          "name": "字段补齐",
+          "description": "通过字典或SPD接口补齐厂家、品牌、单位等信息",
+          "rules": [
+            "rule_enrich_items"
+          ]
+        },
+        {
+          "id": "step4",
+          "order": 4,
+          "name": "库存校验",
+          "description": "批量查询库存，校验RFID是否已存在",
+          "rules": [
+            "rule_check_existing"
+          ]
+        },
+        {
+          "id": "step5",
+          "order": 5,
+          "name": "写入库存",
+          "description": "批量插入或更新库存记录"
+        },
+        {
+          "id": "step6",
+          "order": 6,
+          "name": "更新待上架订单",
+          "description": "将pending_inbound_order状态改为completed"
+        },
+        {
+          "id": "step7",
+          "order": 7,
+          "name": "记录日志",
+          "description": "写入入库日志和库存流转账本"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/inbound.js",
+        "function": "hasOrderAddStock",
+        "line": 175
+      }
+    },
+    {
+      "id": "flow_no_order_inbound",
+      "name": "无单入库流程",
+      "description": "直接扫描耗材RFID进行入库，通过SPD查询耗材信息",
+      "trigger": "用户扫描耗材RFID",
+      "steps": [
+        {
+          "id": "step1",
+          "order": 1,
+          "name": "校验入库方式",
+          "description": "确认系统配置为无单入库模式",
+          "rules": [
+            "rule_inbound_method"
+          ]
+        },
+        {
+          "id": "step2",
+          "order": 2,
+          "name": "SPD查询",
+          "description": "按货柜分组调用SPD接口查询耗材信息"
+        },
+        {
+          "id": "step3",
+          "order": 3,
+          "name": "批量入库",
+          "description": "将SPD返回的耗材信息写入库存表"
+        },
+        {
+          "id": "step4",
+          "order": 4,
+          "name": "记录日志",
+          "description": "写入入库日志和库存流转账本"
+        },
+        {
+          "id": "step5",
+          "order": 5,
+          "name": "更新效期状态",
+          "description": "检测并更新耗材效期状态"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/inbound.js",
+        "function": "noOrderAddStock",
+        "line": 657
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule_inbound_params",
+      "name": "入库参数校验规则",
+      "description": "入库时必须提供有效的耗材清单、目标地点ID和SPD仓库ID",
+      "priority": "high",
+      "category": "校验",
+      "constraints": [
+        "items必须是非空数组",
+        "target_location_id必须存在",
+        "bindingId必须存在"
+      ],
+      "effects": [
+        "校验失败返回400错误"
+      ],
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "operations": [
+          "C"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/inbound.js",
+        "line": 180
+      },
+      "condition": "items必须是非空数组 && target_location_id必须存在 && bindingId必须存在",
+      "effect": "校验失败返回400错误"
+    },
+    {
+      "id": "rule_inbound_method",
+      "name": "入库方式匹配规则",
+      "description": "入库类型必须与系统配置的onShelfInboundMethod一致",
+      "priority": "high",
+      "category": "校验",
+      "constraints": [
+        "type必须为hasOrder或noOrder",
+        "必须与系统配置匹配"
+      ],
+      "effects": [
+        "不匹配时返回400错误"
+      ],
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "operations": [
+          "C"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/inbound.js",
+        "line": 223
+      },
+      "condition": "type必须为hasOrder或noOrder && 必须与系统配置匹配",
+      "effect": "不匹配时返回400错误"
+    },
+    {
+      "id": "rule_enrich_items",
+      "name": "耗材信息补齐规则",
+      "description": "入库时厂家、品牌、单位只能从字典或SPD获取，不信任前端传值",
+      "priority": "high",
+      "category": "数据补齐",
+      "constraints": [
+        "字典优先",
+        "字典未命中时查询SPD",
+        "SPD查询失败则整单失败"
+      ],
+      "effects": [
+        "补齐manufacturer、brand、unit字段",
+        "未补齐则拒绝入库"
+      ],
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "fields": [
+          "manufacturer",
+          "brand",
+          "unit"
+        ],
+        "operations": [
+          "C"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/inbound.js",
+        "function": "enrichInboundItemsWithDictAndSpd",
+        "line": 19
+      },
+      "condition": "字典优先 && 字典未命中时查询SPD && SPD查询失败则整单失败",
+      "effect": "补齐manufacturer、brand、unit字段; 未补齐则拒绝入库"
+    },
+    {
+      "id": "rule_check_existing",
+      "name": "库存重复校验规则",
+      "description": "有单入库时，已在库或已取用的RFID不允许重复入库",
+      "priority": "high",
+      "category": "校验",
+      "constraints": [
+        "有单入库：status为inStock或taken时拒绝",
+        "无单入库：RFID已存在时拒绝"
+      ],
+      "effects": [
+        "重复RFID进入errorItems列表"
+      ],
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "operations": [
+          "C"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/inbound.js",
+        "line": 285
+      },
+      "condition": "有单入库：status为inStock或taken时拒绝 && 无单入库：RFID已存在时拒绝",
+      "effect": "重复RFID进入errorItems列表"
+    },
+    {
+      "id": "rule_center_location",
+      "name": "中心库位置校验规则",
+      "description": "入库目标地点必须是启用的中心库(type=center)",
+      "priority": "high",
+      "category": "校验",
+      "constraints": [
+        "地点必须存在",
+        "地点必须启用(is_active=true)",
+        "地点类型必须是center"
+      ],
+      "effects": [
+        "校验失败返回400错误"
+      ],
+      "affects": {
+        "entities": [
+          "locations"
+        ],
+        "operations": [
+          "R"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/inbound.js",
+        "function": "ensureCenterLocation",
+        "line": 146
+      },
+      "condition": "地点必须存在 && 地点必须启用(is_active=true) && 地点类型必须是center",
+      "effect": "校验失败返回400错误"
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "sm_inventory_status",
+      "name": "库存状态机",
+      "description": "耗材在库存中的状态流转",
+      "entity": "inventory",
+      "field": "status",
+      "states": [
+        {
+          "id": "inStock",
+          "name": "在库",
+          "description": "耗材已入库，可被取用",
+          "is_initial": true
+        },
+        {
+          "id": "taken",
+          "name": "已取用",
+          "description": "耗材已被取出，待消耗或归还"
+        },
+        {
+          "id": "consumed",
+          "name": "已消耗",
+          "description": "耗材已被消耗使用"
+        },
+        {
+          "id": "usedReturn",
+          "name": "消耗退回",
+          "description": "已消耗的耗材被退回",
+          "is_final": true
+        }
+      ],
+      "transitions": [
+        {
+          "from": "inStock",
+          "to": "taken",
+          "trigger": "取用",
+          "description": "用户从货柜取出耗材"
+        },
+        {
+          "from": "taken",
+          "to": "inStock",
+          "trigger": "归还",
+          "description": "用户将未使用的耗材放回货柜"
+        },
+        {
+          "from": "taken",
+          "to": "consumed",
+          "trigger": "消耗确认",
+          "description": "确认耗材已在手术中使用"
+        },
+        {
+          "from": "consumed",
+          "to": "usedReturn",
+          "trigger": "消耗退回",
+          "description": "已消耗耗材因某种原因退回"
+        }
+      ]
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "pc_has_order_inbound",
+      "name": "有单入库",
+      "description": "处理有单入库的完整逻辑",
+      "params": [
+        "params: {userID, type, items, target_location_id, bindingId}"
+      ],
+      "returns": "入库结果 {成功数量, 失败列表}",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "// 有单入库：根据SPD待上架订单进行入库",
+          "type": "comment"
+        },
+        {
+          "indent": 0,
+          "text": "校验 items 是否为有效数组",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "若无效 → 返回错误",
+          "type": "error"
+        },
+        {
+          "indent": 0,
+          "text": "校验 target_location_id 是否为启用的中心库",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "若不是 → 返回错误",
+          "type": "error"
+        },
+        {
+          "indent": 0,
+          "text": "校验系统配置的入库方式是否匹配",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "若不匹配 → 返回错误",
+          "type": "error"
+        },
+        {
+          "indent": 0,
+          "text": "调用 enrichInboundItemsWithDictAndSpd 补齐耗材信息",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "先查字典表补齐厂家/品牌/单位",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "字典未命中的调用 SPD.唯一码查询",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "批量查询库存表，获取已存在的RFID",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "遍历 enrichedItems",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "若RFID已存在且状态为inStock/taken → 加入errorItems",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "若RFID已存在但需更新 → 加入itemsToUpdate",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "若RFID不存在 → 加入itemsToInsert",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "分批执行事务 TxHasOrderInbound",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "批量插入新库存记录",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "批量更新现有库存状态",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "批量更新待上架订单状态为completed",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "记录入库日志和库存流转账本",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "返回入库结果",
+          "type": "return"
+        }
+      ],
+      "calls": [
+        {
+          "name": "字典表.按code查询",
+          "type": "db",
+          "table": "AllConsumablesDictionary",
+          "description": "查询耗材字典补齐信息"
+        },
+        {
+          "name": "SPD.唯一码查询",
+          "type": "api",
+          "method": "POST",
+          "endpoint": "scripts.hv3.spd.spd.queryStock",
+          "description": "查询SPD获取耗材详细信息"
+        },
+        {
+          "name": "库存表.批量查询",
+          "type": "db",
+          "table": "inventory",
+          "description": "检查RFID是否已存在"
+        },
+        {
+          "name": "库存表.批量插入",
+          "type": "db",
+          "table": "inventory",
+          "description": "插入新库存记录"
+        },
+        {
+          "name": "待上架订单.批量更新",
+          "type": "db",
+          "table": "pendingInboundOrder",
+          "description": "更新订单状态为completed"
+        },
+        {
+          "name": "入库日志.记录",
+          "type": "internal",
+          "description": "调用operation.addInBoundAndReturnLog"
+        },
+        {
+          "name": "库存流转账本.记录",
+          "type": "db",
+          "table": "stock_movement",
+          "description": "记录Inbound操作"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/inbound.js",
+        "function": "hasOrderAddStock",
+        "line": 175
+      }
+    }
+  ]
+}

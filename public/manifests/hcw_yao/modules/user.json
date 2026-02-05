@@ -1,0 +1,167 @@
+{
+  "id": "user",
+  "name": "用户认证",
+  "description": "多模态用户认证，支持人脸、静脉、NFC卡等认证方式",
+  "flows": [
+    {
+      "id": "user.face",
+      "name": "人脸认证",
+      "description": "通过人脸识别认证",
+      "steps": [
+        {
+          "id": "user.face_s1",
+          "order": 1,
+          "name": "采集人脸图像"
+        },
+        {
+          "id": "user.face_s2",
+          "order": 2,
+          "name": "提取特征向量"
+        },
+        {
+          "id": "user.face_s3",
+          "order": 3,
+          "name": "匹配用户库"
+        }
+      ]
+    },
+    {
+      "id": "user.nfc",
+      "name": "NFC认证",
+      "description": "通过NFC卡认证",
+      "steps": [
+        {
+          "id": "user.nfc_s1",
+          "order": 1,
+          "name": "读取卡号"
+        },
+        {
+          "id": "user.nfc_s2",
+          "order": 2,
+          "name": "查询绑定用户"
+        },
+        {
+          "id": "user.nfc_s3",
+          "order": 3,
+          "name": "返回认证结果"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "user.r1",
+      "name": "人脸匹配阈值",
+      "description": "相似度达到阈值",
+      "priority": "medium",
+      "condition": "similarity >= threshold",
+      "effect": "认证通过"
+    },
+    {
+      "id": "user.r2",
+      "name": "NFC卡有效性",
+      "description": "卡号有效且未禁用",
+      "priority": "medium",
+      "condition": "card.isValid && !card.disabled",
+      "effect": "认证通过"
+    },
+    {
+      "id": "user.r3",
+      "name": "失败锁定",
+      "description": "连续失败超限",
+      "priority": "medium",
+      "condition": "failCount >= maxFail",
+      "effect": "临时锁定"
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "user.sm1",
+      "name": "认证会话状态机",
+      "entity": "auth_session",
+      "field": "status",
+      "states": [
+        {
+          "id": "idle",
+          "name": "idle"
+        },
+        {
+          "id": "collecting",
+          "name": "collecting"
+        },
+        {
+          "id": "verifying",
+          "name": "verifying"
+        },
+        {
+          "id": "success",
+          "name": "success"
+        },
+        {
+          "id": "failed",
+          "name": "failed"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "idle",
+          "to": "collecting",
+          "trigger": "start"
+        },
+        {
+          "from": "collecting",
+          "to": "verifying",
+          "trigger": "data_ready"
+        },
+        {
+          "from": "verifying",
+          "to": "success",
+          "trigger": "match"
+        },
+        {
+          "from": "verifying",
+          "to": "failed",
+          "trigger": "no_match"
+        }
+      ]
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "user.p1",
+      "name": "faceAuth",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "features = extract(faceData)",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "for user in candidates:",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "score = compare(features, user.face)",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "if score >= threshold: return success(user)",
+          "type": "condition"
+        }
+      ],
+      "calls": [
+        {
+          "name": "extract",
+          "type": "api"
+        },
+        {
+          "name": "compare",
+          "type": "api"
+        }
+      ]
+    }
+  ]
+}

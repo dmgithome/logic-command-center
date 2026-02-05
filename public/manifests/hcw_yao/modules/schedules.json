@@ -1,0 +1,112 @@
+{
+  "id": "schedules",
+  "name": "定时任务",
+  "description": "系统定时任务管理，包括数据同步、效期扫描、库存预警等",
+  "flows": [
+    {
+      "id": "schedules.spd_sync",
+      "name": "SPD数据同步",
+      "description": "与SPD系统同步数据",
+      "steps": [
+        {
+          "id": "schedules.spd_sync_s1",
+          "order": 1,
+          "name": "获取增量变更"
+        },
+        {
+          "id": "schedules.spd_sync_s2",
+          "order": 2,
+          "name": "应用变更"
+        },
+        {
+          "id": "schedules.spd_sync_s3",
+          "order": 3,
+          "name": "更新同步时间"
+        }
+      ]
+    },
+    {
+      "id": "schedules.expire_scan",
+      "name": "效期扫描任务",
+      "description": "定时扫描效期状态",
+      "steps": [
+        {
+          "id": "schedules.expire_scan_s1",
+          "order": 1,
+          "name": "调用效期扫描"
+        },
+        {
+          "id": "schedules.expire_scan_s2",
+          "order": 2,
+          "name": "生成预警"
+        },
+        {
+          "id": "schedules.expire_scan_s3",
+          "order": 3,
+          "name": "发送通知"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "schedules.r1",
+      "name": "同步冲突处理",
+      "description": "数据冲突时的处理策略",
+      "priority": "medium",
+      "condition": "hasConflict == true",
+      "effect": "以SPD为准"
+    },
+    {
+      "id": "schedules.r2",
+      "name": "任务失败重试",
+      "description": "任务失败自动重试",
+      "priority": "medium",
+      "condition": "task.failed && retryCount < maxRetry",
+      "effect": "重新调度"
+    }
+  ],
+  "state_machines": [],
+  "pseudocodes": [
+    {
+      "id": "schedules.p1",
+      "name": "syncSpdData",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "lastSync = getLastSyncTime()",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "changes = SPD.getChanges(lastSync)",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "for change in changes:",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "applyChange(change)",
+          "type": "call"
+        }
+      ],
+      "calls": [
+        {
+          "name": "getLastSyncTime",
+          "type": "db"
+        },
+        {
+          "name": "getChanges",
+          "type": "api"
+        },
+        {
+          "name": "applyChange",
+          "type": "db"
+        }
+      ]
+    }
+  ]
+}

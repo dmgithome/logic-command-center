@@ -1,0 +1,18 @@
+{
+  "id": "spd",
+  "name": "SPD接口",
+  "description": "与SPD系统对接的接口模块",
+  "tags": [
+    "集成",
+    "外部接口"
+  ],
+  "code_refs": [
+    {
+      "file": "scripts/hv3/spd/spd.js"
+    }
+  ],
+  "flows": [],
+  "rules": [],
+  "state_machines": [],
+  "pseudocodes": []
+}

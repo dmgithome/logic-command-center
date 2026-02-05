@@ -1,0 +1,154 @@
+{
+  "id": "transfer",
+  "name": "调拨管理",
+  "description": "库存调拨管理，支持科室间、仓库间调拨",
+  "flows": [
+    {
+      "id": "transfer.create",
+      "name": "创建调拨单",
+      "description": "创建库存调拨申请",
+      "steps": [
+        {
+          "id": "transfer.create_s1",
+          "order": 1,
+          "name": "校验调拨参数"
+        },
+        {
+          "id": "transfer.create_s2",
+          "order": 2,
+          "name": "创建调拨单"
+        },
+        {
+          "id": "transfer.create_s3",
+          "order": 3,
+          "name": "添加调拨明细"
+        }
+      ]
+    },
+    {
+      "id": "transfer.execute",
+      "name": "执行调拨",
+      "description": "执行库存调拨",
+      "steps": [
+        {
+          "id": "transfer.execute_s1",
+          "order": 1,
+          "name": "扣减调出方库存"
+        },
+        {
+          "id": "transfer.execute_s2",
+          "order": 2,
+          "name": "增加调入方库存"
+        },
+        {
+          "id": "transfer.execute_s3",
+          "order": 3,
+          "name": "更新调拨状态"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "transfer.r1",
+      "name": "调出库存充足",
+      "description": "调出方库存足够",
+      "priority": "medium",
+      "condition": "fromStock >= transferQty",
+      "effect": "允许调拨"
+    },
+    {
+      "id": "transfer.r2",
+      "name": "效期校验",
+      "description": "调拨耗材未过期",
+      "priority": "medium",
+      "condition": "item.isExpired == false",
+      "effect": "允许调拨"
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "transfer.sm1",
+      "name": "调拨单状态机",
+      "entity": "transfer",
+      "field": "status",
+      "states": [
+        {
+          "id": "draft",
+          "name": "draft"
+        },
+        {
+          "id": "pending",
+          "name": "pending"
+        },
+        {
+          "id": "approved",
+          "name": "approved"
+        },
+        {
+          "id": "executed",
+          "name": "executed"
+        },
+        {
+          "id": "cancelled",
+          "name": "cancelled"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "pending",
+          "trigger": "submit"
+        },
+        {
+          "from": "pending",
+          "to": "approved",
+          "trigger": "approve"
+        },
+        {
+          "from": "approved",
+          "to": "executed",
+          "trigger": "execute"
+        }
+      ]
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "transfer.p1",
+      "name": "executeTransfer",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "transfer = Transfer.find(id)",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "for item in transfer.items:",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "fromStock.deduct(item)",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "toStock.add(item)",
+          "type": "call"
+        }
+      ],
+      "calls": [
+        {
+          "name": "deduct",
+          "type": "db"
+        },
+        {
+          "name": "add",
+          "type": "db"
+        }
+      ]
+    }
+  ]
+}

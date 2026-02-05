@@ -1,0 +1,1480 @@
+{
+  "id": "inbound",
+  "name": "入库验收模块",
+  "description": "PDA端入库验收功能，支持条码单个扫码验收和RFID批量验收，仅展示未全部上架的单据，每单支持验收(落库)与清空本次增量操作",
+  "code_refs": [
+    {
+      "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java"
+    },
+    {
+      "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundApiService.java"
+    }
+  ],
+  "flows": [
+    {
+      "id": "inbound_main_flow",
+      "name": "入库验收主流程",
+      "description": "从页面初始化到提交验收的完整流程",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "94-231"
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "页面初始化",
+          "description": "初始化UI组件、RFID管理器、条码输入框监听器"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "配置自检",
+          "description": "检查sdCode和货柜ID是否已配置，缺失则提示用户去设置"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "加载待上架清单",
+          "description": "调用fetchPendingOrders拉取未全部上架的入库单据"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "过滤已完成单据",
+          "description": "仅保留accepted < total的单据"
+        },
+        {
+          "id": "step_5",
+          "order": 5,
+          "name": "扫码/RFID匹配",
+          "description": "通过条码扫描或RFID批量读取，匹配待上架RFID"
+        },
+        {
+          "id": "step_6",
+          "order": 6,
+          "name": "库存状态校验",
+          "description": "批量查询耗材库存状态，仅notInStock状态允许入库"
+        },
+        {
+          "id": "step_7",
+          "order": 7,
+          "name": "累加本次增量",
+          "description": "通过校验的RFID加入deltaByOrder集合"
+        },
+        {
+          "id": "step_8",
+          "order": 8,
+          "name": "选择中心库",
+          "description": "从type=center的地点中选择入库目标"
+        },
+        {
+          "id": "step_9",
+          "order": 9,
+          "name": "选择SPD仓库",
+          "description": "从SPD仓库列表中选择绑定仓库"
+        },
+        {
+          "id": "step_10",
+          "order": 10,
+          "name": "提交验收",
+          "description": "调用submitInboundOrder提交有单入库上架"
+        },
+        {
+          "id": "step_11",
+          "order": 11,
+          "name": "刷新清单",
+          "description": "提交成功后重新拉取待上架清单"
+        }
+      ]
+    },
+    {
+      "id": "rfid_batch_scan_flow",
+      "name": "RFID批量验收流程",
+      "description": "使用UHF RFID读卡器批量扫描标签进行验收",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "549-654"
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "前置检查",
+          "description": "检查是否有待上架数据、配置是否完整"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "初始化RFID",
+          "description": "获取UHFManager单例，初始化读卡器"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "配置多标签模式",
+          "description": "根据settings_prefs中rfid_multi_mode设置Gen2session"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "启动异步读取",
+          "description": "调用asyncStartReading预热读卡器"
+        },
+        {
+          "id": "step_5",
+          "order": 5,
+          "name": "启动后台轮询",
+          "description": "每200ms轮询一次tagInventoryRealTime"
+        },
+        {
+          "id": "step_6",
+          "order": 6,
+          "name": "处理标签",
+          "description": "EPC转HEX字符串，normalizeOnReceive格式化为18位RFID"
+        },
+        {
+          "id": "step_7",
+          "order": 7,
+          "name": "本轮去重",
+          "description": "seenEpcsThisRun集合过滤重复标签"
+        },
+        {
+          "id": "step_8",
+          "order": 8,
+          "name": "匹配入库单",
+          "description": "findOrderByPlannedRfid查找RFID所属的入库单"
+        },
+        {
+          "id": "step_9",
+          "order": 9,
+          "name": "蜂鸣反馈",
+          "description": "根据beep_mode配置决定raw模式或biz模式蜂鸣"
+        },
+        {
+          "id": "step_10",
+          "order": 10,
+          "name": "更新EPC滚动列表",
+          "description": "将匹配的RFID添加到底部水平滚动列表"
+        }
+      ]
+    },
+    {
+      "id": "single_barcode_scan_flow",
+      "name": "条码单个扫码验收流程",
+      "description": "通过顶部条码输入框进行单个耗材验收",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "449-478"
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "接收条码输入",
+          "description": "监听IME_ACTION_DONE或ENTER键触发"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "清空输入框",
+          "description": "处理后立即清空，准备下次扫码"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "条码格式校验",
+          "description": "使用BarcodeValidator校验前缀和长度"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "格式化RFID",
+          "description": "调用EpcFormatter.normalizeOnReceive转换为18位RFID"
+        },
+        {
+          "id": "step_5",
+          "order": 5,
+          "name": "匹配入库单",
+          "description": "在所有待上架单的plannedRfids中查找"
+        },
+        {
+          "id": "step_6",
+          "order": 6,
+          "name": "加入增量",
+          "description": "匹配成功则调用addDelta累加"
+        }
+      ]
+    },
+    {
+      "id": "inventory_status_check_flow",
+      "name": "库存状态校验流程",
+      "description": "入库前批量查询耗材库存状态，确保只有notInStock状态的耗材可以入库",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "750-858"
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "收集待查询RFID",
+          "description": "pendingRfidToOrder收集300ms内的RFID"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "批量查询",
+          "description": "调用queryConsumableInfoList批量获取状态"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "状态判定",
+          "description": "检查RFID在哪个状态列表中"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "允许入库",
+          "description": "仅notInStock且不在其他列表中的RFID可入库"
+        },
+        {
+          "id": "step_5",
+          "order": 5,
+          "name": "拒绝并提示",
+          "description": "其他状态给出具体错误提示"
+        }
+      ]
+    },
+    {
+      "id": "submit_acceptance_flow",
+      "name": "提交验收流程",
+      "description": "选择中心库和SPD仓库后提交入库验收",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "872-1073"
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "检查增量",
+          "description": "deltaByOrder中该单据的RFID数量必须>0"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "配置校验",
+          "description": "检查sdCode和货柜ID"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "加载中心库列表",
+          "description": "fetchLocations获取type=center且isActive的地点"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "选择中心库",
+          "description": "单个直接使用，多个弹出选择框"
+        },
+        {
+          "id": "step_5",
+          "order": 5,
+          "name": "保存中心库ID",
+          "description": "写入locations_prefs的default_return_location_id"
+        },
+        {
+          "id": "step_6",
+          "order": 6,
+          "name": "加载SPD仓库列表",
+          "description": "fetchSpdRepositories获取SPD仓库"
+        },
+        {
+          "id": "step_7",
+          "order": 7,
+          "name": "选择SPD仓库",
+          "description": "单个直接使用，多个弹出选择框"
+        },
+        {
+          "id": "step_8",
+          "order": 8,
+          "name": "调用API提交",
+          "description": "submitInboundOrder发送POST请求"
+        },
+        {
+          "id": "step_9",
+          "order": 9,
+          "name": "清理本地状态",
+          "description": "清空deltaByOrder，更新或移除已完成单据"
+        },
+        {
+          "id": "step_10",
+          "order": 10,
+          "name": "刷新列表",
+          "description": "重新调用loadPendingOrders"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "epc_normalize_rule",
+      "name": "EPC格式化规则",
+      "description": "将扫描到的EPC/条码统一转换为18位十进制RFID",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "1096-1140"
+      },
+      "conditions": [
+        {
+          "condition": "输入已是18位纯数字",
+          "result": "直接返回"
+        },
+        {
+          "condition": "输入是20位且以00结尾",
+          "result": "截取前18位"
+        },
+        {
+          "condition": "输入是HEX字符串",
+          "result": "尝试ASCII解码为18位数字"
+        },
+        {
+          "condition": "以上均不匹配",
+          "result": "返回null，过滤该标签"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "inventory_status_rule",
+      "name": "库存状态校验规则",
+      "description": "入库验收前的库存状态校验，决定是否允许入库",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "785-838"
+      },
+      "conditions": [
+        {
+          "condition": "在notInStockList且不在其他列表",
+          "result": "允许入库",
+          "action": "performAddDelta"
+        },
+        {
+          "condition": "在inStockList",
+          "result": "拒绝",
+          "message": "已在耗材屋库存中，无法重复入库"
+        },
+        {
+          "condition": "在takenList",
+          "result": "拒绝",
+          "message": "处于取用未归还状态，不能上架入库"
+        },
+        {
+          "condition": "在consumedList",
+          "result": "拒绝",
+          "message": "已消耗，不能上架入库"
+        },
+        {
+          "condition": "在usedReturnList",
+          "result": "拒绝",
+          "message": "为消耗退回记录，不走首次有单上架"
+        },
+        {
+          "condition": "未命中任何列表",
+          "result": "拒绝",
+          "message": "状态未知，暂不处理"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "order_filter_rule",
+      "name": "入库单过滤规则",
+      "description": "仅展示未全部上架的单据",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "287-298"
+      },
+      "conditions": [
+        {
+          "condition": "accepted >= total",
+          "result": "过滤掉，不显示"
+        },
+        {
+          "condition": "accepted < total",
+          "result": "保留，显示在列表中"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "config_ready_rule",
+      "name": "配置完整性校验规则",
+      "description": "入库验收前必须配置sdCode和货柜ID",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "1075-1093"
+      },
+      "conditions": [
+        {
+          "condition": "sdCode为空",
+          "result": "阻断",
+          "message": "请先在设置中配置 sdCode"
+        },
+        {
+          "condition": "cabinetId <= 0",
+          "result": "阻断",
+          "message": "请先在设置中配置货柜ID"
+        },
+        {
+          "condition": "两者均有效",
+          "result": "通过"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "rfid_match_rule",
+      "name": "RFID匹配入库单规则",
+      "description": "扫描到的RFID必须在某个待上架单的plannedRfids中才处理",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "714-720"
+      },
+      "conditions": [
+        {
+          "condition": "RFID在某单据的plannedRfids中",
+          "result": "返回该单据，继续处理"
+        },
+        {
+          "condition": "RFID不在任何单据的plannedRfids中",
+          "result": "返回null，静默过滤"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "center_location_rule",
+      "name": "中心库选择规则",
+      "description": "入库验收必须选择type=center的活跃地点",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "894-943"
+      },
+      "conditions": [
+        {
+          "condition": "type != center",
+          "result": "过滤掉"
+        },
+        {
+          "condition": "isActive == false",
+          "result": "过滤掉"
+        },
+        {
+          "condition": "serverId <= 0",
+          "result": "过滤掉"
+        },
+        {
+          "condition": "无可用中心库",
+          "result": "报错：未配置中心库地点"
+        },
+        {
+          "condition": "仅一个中心库",
+          "result": "直接使用"
+        },
+        {
+          "condition": "多个中心库",
+          "result": "弹出选择框"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "submit_validation_rule",
+      "name": "提交验收校验规则",
+      "description": "API提交前的参数校验",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundApiService.java",
+        "lines": "173-189"
+      },
+      "conditions": [
+        {
+          "condition": "order == null",
+          "result": "失败：未找到入库单信息"
+        },
+        {
+          "condition": "用户未登录",
+          "result": "失败：用户未登录"
+        },
+        {
+          "condition": "sdCode为空",
+          "result": "失败：请先在设置中配置sdCode"
+        },
+        {
+          "condition": "cabinetId <= 0",
+          "result": "失败：请先在设置中配置货柜ID"
+        },
+        {
+          "condition": "rfids为空",
+          "result": "失败：无新增可提交"
+        },
+        {
+          "condition": "spdBindingId <= 0",
+          "result": "失败：请选择SPD仓库"
+        },
+        {
+          "condition": "userId为空",
+          "result": "失败：用户信息缺少ID"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    }
+  ],
+  "state_machines": [],
+  "pseudocodes": [
+    {
+      "id": "fetch_pending_orders",
+      "name": "拉取待上架入库单",
+      "description": "从服务端获取待上架的入库单据列表",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundApiService.java",
+        "lines": "59-167"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function fetchPendingOrders(callback):",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "if 用户未登录:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "return 失败('用户未登录')",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "if API地址未配置:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "return 失败('API服务器地址未配置')",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "response = GET /api/stock/getWarehousingOrder",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if response.status != 200:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "return 失败(response.message)",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "orders = []",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "for each orderJson in response.data:",
+          "type": "loop"
+        },
+        {
+          "indent": 2,
+          "text": "order = new InboundOrder()",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "order.code = orderJson.orderNo",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "order.total = orderJson.number",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "order.accepted = orderJson.shelfedNumber",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "order.rpNameTo = orderJson.rpNameTo",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "plannedRfids = Set()",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "details = []",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "for each level1 in orderJson.children:",
+          "type": "loop"
+        },
+        {
+          "indent": 3,
+          "text": "for each item in level1.children:",
+          "type": "loop"
+        },
+        {
+          "indent": 4,
+          "text": "rfid = EpcFormatter.normalizeOnReceive(item.rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 4,
+          "text": "detail = new InboundOrderDetail(rfid, item.*)",
+          "type": "action"
+        },
+        {
+          "indent": 4,
+          "text": "detail.baseMatched = item.isShelfed",
+          "type": "action"
+        },
+        {
+          "indent": 4,
+          "text": "details.add(detail)",
+          "type": "action"
+        },
+        {
+          "indent": 4,
+          "text": "if not item.isShelfed:",
+          "type": "condition"
+        },
+        {
+          "indent": 5,
+          "text": "plannedRfids.add(rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "order.plannedRfids = plannedRfids",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "order.details = details",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "orders.add(order)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "return 成功(orders)",
+          "type": "return"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "submit_inbound_order",
+      "name": "提交有单入库上架",
+      "description": "将本次验收的RFID列表提交到服务端",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundApiService.java",
+        "lines": "169-292"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function submitInboundOrder(order, rfids, spdBindingId, callback):",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "// 参数校验",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if order == null: return 失败('未找到入库单信息')",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "if 用户未登录: return 失败('用户未登录')",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "if sdCode为空: return 失败('请先配置sdCode')",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "if cabinetId <= 0: return 失败('请先配置货柜ID')",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "if rfids为空: return 失败('无新增可提交')",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "if spdBindingId <= 0: return 失败('请选择SPD仓库')",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 构建items数组",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "items = []",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "for each rfid in rfids:",
+          "type": "loop"
+        },
+        {
+          "indent": 2,
+          "text": "item = {",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "rfid: rfid,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "cabinetID: cabinetId,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "orderNo: order.code,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "quantity: detail.quantity or 1,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "// 其他字段从detailByRfid获取",
+          "type": "comment"
+        },
+        {
+          "indent": 2,
+          "text": "}",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "items.add(item)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 构建请求体",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "body = {",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "userID: currentUser.userId,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "userName: currentUser.username,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "sdCode: sdCode,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "orderNo: order.code,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "type: 'hasOrder',",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "cabinetID: cabinetId,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "createDate: now(),",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "items: items,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "target_location_id: 中心库ID,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "bindingId: spdBindingId",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "}",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "response = POST /api/stock/hasOrderInbound body",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if response.status in [200, 0] and response.data有效:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "return 成功(true)",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "else:",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "return 失败(response.msg)",
+          "type": "return"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "handle_rfid_tag",
+      "name": "处理RFID标签",
+      "description": "RFID轮询读取到标签后的处理逻辑",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "634-654"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function handleRfidTag(tag):",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "epcHex = bytesToHexString(tag.EpcId)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if epcHex为空: return",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if beepModeRaw:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "rfidBeepManager.requestBeep()  // 原始蜂鸣",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "rfid18 = EpcFormatter.normalizeOnReceive(epcHex)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if rfid18为空: return  // 非合规格式，过滤",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if rfid18 in seenEpcsThisRun:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "return  // 本轮已处理，去重",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "seenEpcsThisRun.add(rfid18)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "order = findOrderByPlannedRfid(rfid18)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if order == null:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "return  // 非待上架RFID，静默过滤",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "addDelta(order, rfid18)  // 加入本次增量",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if not beepModeRaw:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "rfidBeepManager.requestBeep()  // 业务蜂鸣",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "epcAdapter.addEpc(rfid18)  // 更新UI滚动列表",
+          "type": "action"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "process_pending_inbound_rfids",
+      "name": "批量处理待查询RFID",
+      "description": "微批处理机制，收集300ms内的RFID后批量查询库存状态",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "750-779"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function processPendingInboundRfids():",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "synchronized(pendingRfidToOrder):",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "if pendingRfidToOrder.isEmpty():",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "return",
+          "type": "return"
+        },
+        {
+          "indent": 2,
+          "text": "toProcess = copy(pendingRfidToOrder)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "pendingRfidToOrder.clear()",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "rfidList = toProcess.keys()",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "Log('Batch processing ' + rfidList.size() + ' RFIDs')",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "ConsumableApiService.queryConsumableInfoList(rfidList, {",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "onSuccess: (resp) => {",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "for each (rfid, order) in toProcess:",
+          "type": "loop"
+        },
+        {
+          "indent": 4,
+          "text": "handleInboundInventoryCheck(order, rfid, resp)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "},",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "onFailure: (e) => {",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "showError('批量获取耗材库存状态失败')",
+          "type": "error"
+        },
+        {
+          "indent": 2,
+          "text": "}",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "})",
+          "type": "action"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "handle_inbound_inventory_check",
+      "name": "入库库存状态校验",
+      "description": "根据耗材库存状态决定是否允许入库",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "785-838"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function handleInboundInventoryCheck(order, rfid, resp):",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if isFinishing(): return",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "if order == null or order.code为空: return",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 确保订单仍存在于当前列表",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "target = orders.find(o => o.code == order.code)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if target == null:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "showInfo('当前入库单已更新，忽略标签 ' + rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "return",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 判断RFID在哪个状态列表",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "inNotInStock = resp.notInStockList.contains(rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "inInStock = resp.inStockList.containsRfid(rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "inTaken = resp.takenList.containsRfid(rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "inConsumed = resp.consumedList.containsRfid(rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "inUsedReturn = resp.usedReturnList.containsRfid(rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 仅notInStock且不在其他列表时允许入库",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if inNotInStock and not (inInStock or inTaken or inConsumed or inUsedReturn):",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "performAddDelta(target, rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "return",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 其他状态给出具体错误提示",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if inInStock:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "showError('耗材已在库存中，无法重复入库')",
+          "type": "error"
+        },
+        {
+          "indent": 1,
+          "text": "else if inTaken:",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "showError('耗材处于取用未归还状态')",
+          "type": "error"
+        },
+        {
+          "indent": 1,
+          "text": "else if inConsumed:",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "showError('耗材已消耗')",
+          "type": "error"
+        },
+        {
+          "indent": 1,
+          "text": "else if inUsedReturn:",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "showError('耗材为消耗退回记录')",
+          "type": "error"
+        },
+        {
+          "indent": 1,
+          "text": "else:",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "showError('状态未知，暂不处理')",
+          "type": "error"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "add_delta",
+      "name": "添加本次验收增量",
+      "description": "将RFID加入待处理队列，延迟批量查询",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/InboundAcceptanceActivity.java",
+        "lines": "722-745"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function addDelta(order, rfid):",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 确保在主线程执行",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if not isMainThread():",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "runOnUiThread(() => addDelta(order, rfid))",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "return",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if order == null or order.code为空: return",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 检查是否已在本次会话中添加过",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "existing = deltaByOrder.get(order.code)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if existing != null and rfid in existing:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "return  // 已添加，跳过",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 加入待处理队列",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "synchronized(pendingRfidToOrder):",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "if rfid not in pendingRfidToOrder:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "pendingRfidToOrder.put(rfid, order)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 延迟300ms批量处理",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "inboundBatchHandler.removeCallbacks(inboundBatchRunnable)",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "inboundBatchHandler.postDelayed(inboundBatchRunnable, 300)",
+          "type": "action"
+        }
+      ],
+      "calls": []
+    }
+  ]
+}

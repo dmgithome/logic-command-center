@@ -1,0 +1,1432 @@
+{
+  "id": "checkout",
+  "name": "耗材出库模块",
+  "description": "PDA耗材取用/归还模块，支持条码扫描、批量处理、本地记录持久化及服务端同步",
+  "code_refs": [
+    {
+      "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java"
+    },
+    {
+      "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/CheckoutRecordDatabase.java"
+    },
+    {
+      "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableApiService.java"
+    }
+  ],
+  "flows": [
+    {
+      "id": "checkout_flow",
+      "name": "耗材取用流程",
+      "description": "用户扫描条码，查询耗材状态，确认后提交取用记录",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "methods": [
+          "confirmCheckout",
+          "callApiForBarcode",
+          "processPendingBarcodes",
+          "handleApiResponseOptimized",
+          "findConsumableInResponse"
+        ]
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "权限校验",
+          "description": "检查用户是否有耗材领用权限(CONSUMABLE_CHECKOUT)"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "扫描条码",
+          "description": "用户通过PDA扫描枪输入条码，触发回车事件"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "条码格式校验",
+          "description": "使用BarcodeValidator校验条码格式"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "重复检查",
+          "description": "检查条码是否已添加到明细(addedBarcodes缓存)"
+        },
+        {
+          "id": "step_5",
+          "order": 5,
+          "name": "批量查询API",
+          "description": "将条码加入待处理队列，延迟300ms批量查询(微批处理)"
+        },
+        {
+          "id": "step_6",
+          "order": 6,
+          "name": "状态判断",
+          "description": "根据API返回的5个列表判断耗材状态：notInStockList/inStockList/takenList/consumedList/usedReturnList"
+        },
+        {
+          "id": "step_7",
+          "order": 7,
+          "name": "显示确认弹窗",
+          "description": "弹出耗材信息确认对话框，用户点击添加按钮"
+        },
+        {
+          "id": "step_8",
+          "order": 8,
+          "name": "添加到明细",
+          "description": "按商品编号分组添加到列表，更新数量统计"
+        },
+        {
+          "id": "step_9",
+          "order": 9,
+          "name": "选择术间",
+          "description": "取用模式必须选择目标术间(地点)"
+        },
+        {
+          "id": "step_10",
+          "order": 10,
+          "name": "提交取用记录",
+          "description": "按from(current_location_id)分组，调用createTakeAndReturnLog接口提交"
+        },
+        {
+          "id": "step_11",
+          "order": 11,
+          "name": "保存本地记录",
+          "description": "调用recordManager.generateCheckoutRecord保存到SQLite"
+        }
+      ]
+    },
+    {
+      "id": "return_flow",
+      "name": "耗材归还流程",
+      "description": "用户扫描已取用的耗材条码，确认后提交归还记录",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "methods": [
+          "confirmCheckout",
+          "findConsumableInResponse"
+        ]
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "模式判断",
+          "description": "通过Intent的EXTRA_OPERATION_MODE参数判断为归还模式"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "扫描条码",
+          "description": "同取用流程，扫描条码触发查询"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "归还状态判断",
+          "description": "归还模式下仅允许takenList和usedReturnList中的耗材"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "提交归还记录",
+          "description": "无需选择术间，直接提交归还列表"
+        },
+        {
+          "id": "step_5",
+          "order": 5,
+          "name": "保存本地记录",
+          "description": "调用recordManager.generateReturnRecord保存归还记录"
+        }
+      ]
+    },
+    {
+      "id": "history_view_flow",
+      "name": "历史记录查看流程",
+      "description": "从侧边栏查看历史取用/归还记录，可加载到界面查看详情",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "methods": [
+          "loadHistoryRecords",
+          "onHistoryRecordClick",
+          "loadRecordToCheckoutInterface"
+        ]
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "加载历史记录",
+          "description": "按时间过滤(TODAY)和记录类型(checkout/return)加载最近10条"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "点击记录",
+          "description": "点击历史记录项，加载到主界面"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "进入查看模式",
+          "description": "切换到VIEW_RECORD状态，禁用扫码和编辑"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "barcode_validation",
+      "name": "条码格式校验",
+      "description": "使用BarcodeValidator校验条码格式，校验失败显示错误提示",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "559-573"
+      },
+      "condition": "barcodeValidator.validateBarcode(barcode) == false",
+      "action": "显示错误提示: barcodeValidator.getInvalidBarcodeMessage()",
+      "priority": "medium",
+      "constraints": [
+        "barcodeValidator.validateBarcode(barcode) == false"
+      ],
+      "effects": [
+        "显示错误提示: barcodeValidator.getInvalidBarcodeMessage()"
+      ]
+    },
+    {
+      "id": "duplicate_barcode_check",
+      "name": "重复条码检查",
+      "description": "同一条码不能重复添加到明细列表",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "649-658",
+        "method": "isBarcodeAlreadyAdded"
+      },
+      "condition": "addedBarcodes.contains(barcode)",
+      "action": "显示错误: '该条码已添加到明细中'",
+      "priority": "medium",
+      "constraints": [
+        "addedBarcodes.contains(barcode)"
+      ],
+      "effects": [
+        "显示错误: '该条码已添加到明细中'"
+      ]
+    },
+    {
+      "id": "take_mode_status_check",
+      "name": "取用模式状态校验",
+      "description": "取用模式下仅允许inStockList中的耗材",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "814-855"
+      },
+      "rules": [
+        {
+          "status": "notInStockList",
+          "action": "拒绝",
+          "message": "[条码]耗材未入库"
+        },
+        {
+          "status": "inStockList",
+          "action": "允许取用"
+        },
+        {
+          "status": "takenList",
+          "action": "拒绝",
+          "message": "[条码]领用后未归还，请先归还"
+        },
+        {
+          "status": "consumedList",
+          "action": "拒绝",
+          "message": "[条码]耗材已消耗，不能取用"
+        },
+        {
+          "status": "usedReturnList",
+          "action": "拒绝",
+          "message": "[条码]为消耗退回记录，不作为取用对象"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "return_mode_status_check",
+      "name": "归还模式状态校验",
+      "description": "归还模式下仅允许takenList和usedReturnList中的耗材",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "856-899"
+      },
+      "rules": [
+        {
+          "status": "takenList",
+          "action": "允许归还"
+        },
+        {
+          "status": "usedReturnList",
+          "action": "允许归还"
+        },
+        {
+          "status": "inStockList",
+          "action": "拒绝",
+          "message": "[条码]未领用，不可归还"
+        },
+        {
+          "status": "consumedList",
+          "action": "拒绝",
+          "message": "[条码]已消耗，不可归还"
+        }
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "room_required_for_take",
+      "name": "取用必须选择术间",
+      "description": "取用模式下必须选择目标术间，归还模式无需选择",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "1571-1578"
+      },
+      "condition": "operationMode == TAKE && selectedRoom.isEmpty()",
+      "action": "显示错误: '请选择术间'",
+      "priority": "medium",
+      "constraints": [
+        "operationMode == TAKE && selectedRoom.isEmpty()"
+      ],
+      "effects": [
+        "显示错误: '请选择术间'"
+      ]
+    },
+    {
+      "id": "empty_list_check",
+      "name": "明细列表非空校验",
+      "description": "提交前必须有至少一项耗材",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "1580-1582"
+      },
+      "condition": "consumableGroupList.isEmpty()",
+      "action": "显示错误: '请先扫描耗材'",
+      "priority": "medium",
+      "constraints": [
+        "consumableGroupList.isEmpty()"
+      ],
+      "effects": [
+        "显示错误: '请先扫描耗材'"
+      ]
+    },
+    {
+      "id": "rfid_required",
+      "name": "RFID必填校验",
+      "description": "提交时每个耗材必须有RFID，缺失则拒绝提交",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "1591-1597"
+      },
+      "condition": "item.getRfid() == null || item.getRfid().isEmpty()",
+      "action": "显示错误: '数据不完整，建议重新扫码'",
+      "priority": "medium",
+      "constraints": [
+        "item.getRfid() == null || item.getRfid().isEmpty()"
+      ],
+      "effects": [
+        "显示错误: '数据不完整，建议重新扫码'"
+      ]
+    },
+    {
+      "id": "permission_check",
+      "name": "权限校验",
+      "description": "进入页面时检查CONSUMABLE_CHECKOUT权限",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "159-163"
+      },
+      "condition": "!hasPermission(Permissions.CONSUMABLE_CHECKOUT)",
+      "action": "显示错误并关闭页面: '您没有耗材领用权限'",
+      "priority": "medium",
+      "constraints": [
+        "!hasPermission(Permissions.CONSUMABLE_CHECKOUT)"
+      ],
+      "effects": [
+        "显示错误并关闭页面: '您没有耗材领用权限'"
+      ]
+    },
+    {
+      "id": "view_mode_scan_block",
+      "name": "查看模式禁止扫码",
+      "description": "查看历史记录时禁止扫码输入",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "545-550"
+      },
+      "condition": "isViewMode == true",
+      "action": "清空输入框，显示提示: '当前为查看模式，禁止扫码'",
+      "priority": "medium",
+      "constraints": [
+        "isViewMode == true"
+      ],
+      "effects": [
+        "清空输入框，显示提示: '当前为查看模式，禁止扫码'"
+      ]
+    },
+    {
+      "id": "record_retention_7days",
+      "name": "记录保留7天",
+      "description": "本地记录自动清理超过7天的数据",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/CheckoutRecordDatabase.java",
+        "line_range": "706-730",
+        "method": "cleanupOldRecords"
+      },
+      "condition": "checkout_time < (now - 7天)",
+      "action": "自动删除记录",
+      "priority": "medium",
+      "constraints": [
+        "checkout_time < (now - 7天)"
+      ],
+      "effects": [
+        "自动删除记录"
+      ]
+    },
+    {
+      "id": "location_filter_room_type",
+      "name": "地点过滤规则",
+      "description": "术间下拉仅显示type=room且isActive=true的地点",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "432-440"
+      },
+      "condition": "type == 'room' && isActive == true",
+      "action": "添加到术间下拉列表",
+      "priority": "medium",
+      "constraints": [
+        "type == 'room' && isActive == true"
+      ],
+      "effects": [
+        "添加到术间下拉列表"
+      ]
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "checkout_ui_state",
+      "name": "出库界面状态机",
+      "description": "控制界面交互状态：新建/查看/提交中/弹窗",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "1415-1474",
+        "method": "applyUiState",
+        "enum": "CheckoutUiState"
+      },
+      "states": [
+        {
+          "id": "NEW_CHECKOUT",
+          "name": "NEW_CHECKOUT",
+          "description": "新建取用/归还模式"
+        },
+        {
+          "id": "VIEW_RECORD",
+          "name": "VIEW_RECORD",
+          "description": "查看历史记录模式"
+        },
+        {
+          "id": "SUBMITTING",
+          "name": "SUBMITTING",
+          "description": "提交中状态"
+        },
+        {
+          "id": "DIALOG_OPEN",
+          "name": "DIALOG_OPEN",
+          "description": "弹窗打开状态(预留)"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "NEW_CHECKOUT",
+          "to": "SUBMITTING",
+          "trigger": "点击确认按钮"
+        },
+        {
+          "from": "SUBMITTING",
+          "to": "NEW_CHECKOUT",
+          "trigger": "提交成功或失败"
+        },
+        {
+          "from": "NEW_CHECKOUT",
+          "to": "VIEW_RECORD",
+          "trigger": "点击历史记录"
+        },
+        {
+          "from": "VIEW_RECORD",
+          "to": "NEW_CHECKOUT",
+          "trigger": "点击新建按钮"
+        }
+      ],
+      "entity": "出库界面状态机",
+      "field": "status"
+    },
+    {
+      "id": "operation_mode",
+      "name": "操作模式",
+      "description": "取用/归还两种操作模式",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "37-39",
+        "enum": "OperationMode"
+      },
+      "states": [
+        {
+          "id": "TAKE",
+          "name": "TAKE",
+          "description": "取用模式"
+        },
+        {
+          "id": "RETURN",
+          "name": "RETURN",
+          "description": "归还模式"
+        }
+      ],
+      "transitions": [
+        {
+          "to": "TAKE",
+          "trigger": "Intent.EXTRA_OPERATION_MODE='take'或空"
+        },
+        {
+          "to": "RETURN",
+          "trigger": "Intent.EXTRA_OPERATION_MODE='return'"
+        }
+      ],
+      "entity": "操作模式",
+      "field": "status"
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "confirm_checkout_pseudocode",
+      "name": "确认取用/归还",
+      "description": "提交取用或归还记录的核心逻辑",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "1569-1716",
+        "method": "confirmCheckout"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function confirmCheckout():",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 1. 校验",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if 取用模式 and 术间未选择:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "显示错误('请选择术间')",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "return",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "if 明细列表为空:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "显示错误('请先扫描耗材')",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "return",
+          "type": "return"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 2. 进入提交状态",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "applyUiState(SUBMITTING)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 3. 构造提交数据",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "takeItems = []",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "returnItems = []",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "for each groupItem in consumableGroupList:",
+          "type": "loop"
+        },
+        {
+          "indent": 2,
+          "text": "for each rfid in groupItem.rfids:",
+          "type": "loop"
+        },
+        {
+          "indent": 3,
+          "text": "item = selectedItemsByRfid[rfid]",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "if item缺少RFID:",
+          "type": "condition"
+        },
+        {
+          "indent": 4,
+          "text": "显示错误('数据不完整')",
+          "type": "action"
+        },
+        {
+          "indent": 4,
+          "text": "return",
+          "type": "return"
+        },
+        {
+          "indent": 3,
+          "text": "if 取用模式: takeItems.add(item)",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "else: returnItems.add(item)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 4. 按来源地点分组提交",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "groups = groupBy(items, current_location_id)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "for each (fromId, itemList) in groups:",
+          "type": "loop"
+        },
+        {
+          "indent": 2,
+          "text": "apiService.createTakeAndReturnLog(",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "operationRoomId,  // 取用时为目标术间ID",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "takeItems或returnItems,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "fromId,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "toLocationId",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": ")",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 5. 全部成功后",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "recordManager.generateCheckoutRecord() 或 generateReturnRecord()",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "显示成功提示",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "清空明细",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "刷新历史记录",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "applyUiState(NEW_CHECKOUT)",
+          "type": "action"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "find_consumable_pseudocode",
+      "name": "查找耗材状态判断",
+      "description": "根据API返回的5个列表判断耗材是否可取用/归还",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "798-917",
+        "method": "findConsumableInResponse"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function findConsumableInResponse(response, barcode):",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 1. 检查未入库列表",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if barcode in response.notInStockList:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "显示错误('[条码]耗材未入库')",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "return null",
+          "type": "return"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 2. 取用模式",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if 取用模式:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode in response.inStockList:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "return item  // 允许取用",
+          "type": "return"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode in response.takenList:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "显示错误('领用后未归还，请先归还')",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "return null",
+          "type": "return"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode in response.consumedList:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "显示错误('耗材已消耗，不能取用')",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "return null",
+          "type": "return"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode in response.usedReturnList:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "显示错误('为消耗退回记录，不作为取用对象')",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "return null",
+          "type": "return"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 3. 归还模式",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if 归还模式:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode in response.takenList:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "return item  // 允许归还",
+          "type": "return"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode in response.usedReturnList:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "return item  // 允许归还",
+          "type": "return"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode in response.inStockList:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "显示错误('未领用，不可归还')",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "return null",
+          "type": "return"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode in response.consumedList:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "显示错误('已消耗，不可归还')",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "return null",
+          "type": "return"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 4. 未找到",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "显示错误('未找到对应的耗材信息')",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "return null",
+          "type": "return"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "batch_process_pseudocode",
+      "name": "微批处理条码查询",
+      "description": "将短时间内的多个条码合并为一次API请求",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableCheckoutNewActivity.java",
+        "line_range": "696-761",
+        "methods": [
+          "callApiForBarcode",
+          "processPendingBarcodes"
+        ]
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "BATCH_DELAY_MS = 300",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "pendingBarcodes = []",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "function callApiForBarcode(barcode):",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "synchronized(pendingBarcodes):",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "if barcode not in pendingBarcodes:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "pendingBarcodes.add(barcode)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 重置延迟计时器",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "handler.removeCallbacks(batchProcessRunnable)",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "handler.postDelayed(batchProcessRunnable, BATCH_DELAY_MS)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "function processPendingBarcodes():",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "synchronized(pendingBarcodes):",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "if pendingBarcodes.isEmpty(): return",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "barcodesToProcess = copy(pendingBarcodes)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "pendingBarcodes.clear()",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "显示提示('正在查询 N 个耗材...')",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "apiService.queryConsumableInfoList(barcodesToProcess, callback):",
+          "type": "call"
+        },
+        {
+          "indent": 2,
+          "text": "onSuccess(response):",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "for each barcode in barcodesToProcess:",
+          "type": "loop"
+        },
+        {
+          "indent": 4,
+          "text": "handleApiResponseOptimized(response, barcode)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "onFailure(e):",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "显示错误('批量查询失败')",
+          "type": "action"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "insert_checkout_record_pseudocode",
+      "name": "插入取用记录到本地数据库",
+      "description": "将取用记录持久化到SQLite",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/CheckoutRecordDatabase.java",
+        "line_range": "459-520",
+        "method": "insertCheckoutRecord"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function insertCheckoutRecord(record):",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "synchronized(databaseLock):",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "db = getWritableDatabase()",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values = ContentValues()",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('record_id', record.recordId)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('checkout_time', record.checkoutTime)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('operating_room', record.operatingRoom)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('total_quantity', record.totalQuantity)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('operator', record.operator)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('operator_user_id', record.operatorUserId)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('items_json', itemsToJson(record.items))",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('server_record_id', record.serverRecordId)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "values.put('record_type', 'checkout')",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "result = db.insert(TABLE_CHECKOUT_RECORDS, values)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "if result == -1:",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "// 尝试修复缺失列后重试",
+          "type": "comment"
+        },
+        {
+          "indent": 3,
+          "text": "ensureColumnExists(db, 'server_record_id', 'INTEGER')",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "result = db.insert(TABLE_CHECKOUT_RECORDS, values)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "// 清理7天前的记录",
+          "type": "comment"
+        },
+        {
+          "indent": 2,
+          "text": "cleanupOldRecords()",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "return result",
+          "type": "return"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "create_take_return_log_pseudocode",
+      "name": "调用服务端取用/归还接口",
+      "description": "POST /api/stock/createTakeAndReturnLog",
+      "code_ref": {
+        "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableApiService.java",
+        "line_range": "1102-1249",
+        "method": "createTakeAndReturnLog"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "function createTakeAndReturnLog(operationRoomId, takeItems, returnItems, fromLocationId, toLocationId):",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 1. 校验",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "if 用户未登录: callback.onFailure('用户未登录')",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "if API未配置: callback.onFailure('API服务器地址未配置')",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "cabinetId = BarcodeValidator.getCabinetId()",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if cabinetId <= 0: callback.onFailure('请先配置货柜ID')",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 2. 构造请求体",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "body = {",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "userID: currentUser.userId,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "openDoorTime: now,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "closeDoorTime: now,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "operationroomId: operationRoomId,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "cabinetID: cabinetId,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "from_location_id: fromLocationId ?? cabinetId,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "to_location_id: toLocationId,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "takeList: [],",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "returnList: []",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "}",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 3. 填充明细",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "lineId = 1",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "for item in takeItems:",
+          "type": "loop"
+        },
+        {
+          "indent": 2,
+          "text": "body.takeList.add({",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "id: lineId++,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "rfid: item.rfid,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "batch, expiryDate, code, name, spec, manufacturer, brand, unit",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "})",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "for item in returnItems:",
+          "type": "loop"
+        },
+        {
+          "indent": 2,
+          "text": "body.returnList.add({",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "id: lineId++,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "rfid: item.rfid,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "...,",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "expected_current_location_id: item.currentLocationId  // 并发校验",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "})",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 4. 发送请求",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "response = sendHttpRequest(CREATE_TAKE_RETURN_LOG, 'POST', body)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "if response.status != 200:",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "throw Exception(response.message)",
+          "type": "error"
+        },
+        {
+          "indent": 0,
+          "text": "",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "// 5. 返回结果",
+          "type": "comment"
+        },
+        {
+          "indent": 1,
+          "text": "result = {",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "recordId: response.data.recordId,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "takeCount: response.data.takeCount,",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "returnCount: response.data.returnCount",
+          "type": "return"
+        },
+        {
+          "indent": 1,
+          "text": "}",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "callback.onSuccess(result)",
+          "type": "call"
+        }
+      ],
+      "calls": []
+    }
+  ]
+}

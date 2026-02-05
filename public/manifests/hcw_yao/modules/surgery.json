@@ -1,0 +1,159 @@
+{
+  "id": "surgery",
+  "name": "手术室管理",
+  "description": "手术室耗材管理，包括术前准备、术中使用、术后结算",
+  "flows": [
+    {
+      "id": "surgery.prepare",
+      "name": "术前准备",
+      "description": "根据手术类型准备耗材",
+      "steps": [
+        {
+          "id": "surgery.prepare_s1",
+          "order": 1,
+          "name": "查询手术模板"
+        },
+        {
+          "id": "surgery.prepare_s2",
+          "order": 2,
+          "name": "预留库存"
+        },
+        {
+          "id": "surgery.prepare_s3",
+          "order": 3,
+          "name": "生成备货清单"
+        }
+      ]
+    },
+    {
+      "id": "surgery.settle",
+      "name": "费用结算",
+      "description": "结算手术耗材费用",
+      "steps": [
+        {
+          "id": "surgery.settle_s1",
+          "order": 1,
+          "name": "汇总使用记录"
+        },
+        {
+          "id": "surgery.settle_s2",
+          "order": 2,
+          "name": "计算费用"
+        },
+        {
+          "id": "surgery.settle_s3",
+          "order": 3,
+          "name": "生成账单"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "surgery.r1",
+      "name": "术前备货",
+      "description": "按模板自动备货",
+      "priority": "medium",
+      "condition": "surgery.type matches template",
+      "effect": "生成备货清单"
+    },
+    {
+      "id": "surgery.r2",
+      "name": "耗材追溯",
+      "description": "高值耗材记录追溯",
+      "priority": "medium",
+      "condition": "item.isHighValue == true",
+      "effect": "记录患者关联"
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "surgery.sm1",
+      "name": "手术耗材状态机",
+      "entity": "surgery_item",
+      "field": "status",
+      "states": [
+        {
+          "id": "prepared",
+          "name": "prepared"
+        },
+        {
+          "id": "issued",
+          "name": "issued"
+        },
+        {
+          "id": "used",
+          "name": "used"
+        },
+        {
+          "id": "returned",
+          "name": "returned"
+        },
+        {
+          "id": "settled",
+          "name": "settled"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "prepared",
+          "to": "issued",
+          "trigger": "pickup"
+        },
+        {
+          "from": "issued",
+          "to": "used",
+          "trigger": "consume"
+        },
+        {
+          "from": "issued",
+          "to": "returned",
+          "trigger": "return"
+        },
+        {
+          "from": "used",
+          "to": "settled",
+          "trigger": "settle"
+        }
+      ]
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "surgery.p1",
+      "name": "prepareSurgery",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "template = findTemplate(surgery.type)",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "for item in template.items:",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "reserveStock(item)",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "createPrepareRecord(item)",
+          "type": "call"
+        }
+      ],
+      "calls": [
+        {
+          "name": "findTemplate",
+          "type": "db"
+        },
+        {
+          "name": "reserveStock",
+          "type": "db"
+        }
+      ]
+    }
+  ]
+}

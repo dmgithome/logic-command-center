@@ -1,0 +1,271 @@
+{
+  "id": "apply",
+  "name": "申领管理",
+  "description": "高值耗材申领流程管理，包括科室申领、审核、配货、确认收货等完整流程",
+  "flows": [
+    {
+      "id": "apply.create",
+      "name": "创建申领单",
+      "description": "创建新的耗材申领单",
+      "steps": [
+        {
+          "id": "apply.create_s1",
+          "order": 1,
+          "name": "校验申领参数"
+        },
+        {
+          "id": "apply.create_s2",
+          "order": 2,
+          "name": "创建申领单记录"
+        },
+        {
+          "id": "apply.create_s3",
+          "order": 3,
+          "name": "添加申领明细"
+        }
+      ]
+    },
+    {
+      "id": "apply.submit",
+      "name": "提交申领",
+      "description": "提交申领单进入审核",
+      "steps": [
+        {
+          "id": "apply.submit_s1",
+          "order": 1,
+          "name": "检查申领单状态"
+        },
+        {
+          "id": "apply.submit_s2",
+          "order": 2,
+          "name": "更新为待审核"
+        },
+        {
+          "id": "apply.submit_s3",
+          "order": 3,
+          "name": "发送审核通知"
+        }
+      ]
+    },
+    {
+      "id": "apply.approve",
+      "name": "审核申领",
+      "description": "审核通过或驳回",
+      "steps": [
+        {
+          "id": "apply.approve_s1",
+          "order": 1,
+          "name": "校验审核权限"
+        },
+        {
+          "id": "apply.approve_s2",
+          "order": 2,
+          "name": "执行审核操作"
+        },
+        {
+          "id": "apply.approve_s3",
+          "order": 3,
+          "name": "记录审核结果"
+        }
+      ]
+    },
+    {
+      "id": "apply.distribute",
+      "name": "配货出库",
+      "description": "根据审核通过的申领单配货",
+      "steps": [
+        {
+          "id": "apply.distribute_s1",
+          "order": 1,
+          "name": "查询申领明细"
+        },
+        {
+          "id": "apply.distribute_s2",
+          "order": 2,
+          "name": "扣减库存"
+        },
+        {
+          "id": "apply.distribute_s3",
+          "order": 3,
+          "name": "生成出库记录"
+        }
+      ]
+    },
+    {
+      "id": "apply.confirm",
+      "name": "确认收货",
+      "description": "科室确认收到耗材",
+      "steps": [
+        {
+          "id": "apply.confirm_s1",
+          "order": 1,
+          "name": "校验配送状态"
+        },
+        {
+          "id": "apply.confirm_s2",
+          "order": 2,
+          "name": "更新为已完成"
+        },
+        {
+          "id": "apply.confirm_s3",
+          "order": 3,
+          "name": "记录收货时间"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "apply.r1",
+      "name": "申领数量校验",
+      "description": "申领数量必须大于0",
+      "priority": "medium",
+      "condition": "quantity > 0",
+      "effect": "允许申领"
+    },
+    {
+      "id": "apply.r2",
+      "name": "科室权限校验",
+      "description": "只能申领本科室耗材",
+      "priority": "medium",
+      "condition": "user.deptId == apply.deptId",
+      "effect": "允许操作"
+    },
+    {
+      "id": "apply.r3",
+      "name": "库存充足校验",
+      "description": "库存必须满足申领数量",
+      "priority": "medium",
+      "condition": "stock >= applyQty",
+      "effect": "允许配货"
+    },
+    {
+      "id": "apply.r4",
+      "name": "审核权限校验",
+      "description": "必须有审核权限",
+      "priority": "medium",
+      "condition": "user.hasPermission('apply.approve')",
+      "effect": "允许审核"
+    },
+    {
+      "id": "apply.r5",
+      "name": "状态流转校验",
+      "description": "状态必须合法",
+      "priority": "medium",
+      "condition": "isValidTransition(from, to)",
+      "effect": "执行变更"
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "apply.sm1",
+      "name": "申领单状态机",
+      "entity": "apply",
+      "field": "status",
+      "states": [
+        {
+          "id": "draft",
+          "name": "draft"
+        },
+        {
+          "id": "submitted",
+          "name": "submitted"
+        },
+        {
+          "id": "approved",
+          "name": "approved"
+        },
+        {
+          "id": "rejected",
+          "name": "rejected"
+        },
+        {
+          "id": "distributed",
+          "name": "distributed"
+        },
+        {
+          "id": "confirmed",
+          "name": "confirmed"
+        },
+        {
+          "id": "cancelled",
+          "name": "cancelled"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "submitted",
+          "trigger": "submit"
+        },
+        {
+          "from": "submitted",
+          "to": "approved",
+          "trigger": "approve"
+        },
+        {
+          "from": "submitted",
+          "to": "rejected",
+          "trigger": "reject"
+        },
+        {
+          "from": "approved",
+          "to": "distributed",
+          "trigger": "distribute"
+        },
+        {
+          "from": "distributed",
+          "to": "confirmed",
+          "trigger": "confirm"
+        },
+        {
+          "from": "draft",
+          "to": "cancelled",
+          "trigger": "cancel"
+        }
+      ]
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "apply.p1",
+      "name": "createApply",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "validate(items)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "apply = new Apply(deptId)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "apply.addItems(items)",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "return apply.save()",
+          "type": "return"
+        }
+      ],
+      "calls": [
+        {
+          "name": "validate",
+          "type": "internal"
+        },
+        {
+          "name": "addItems",
+          "type": "internal"
+        },
+        {
+          "name": "save",
+          "type": "db"
+        }
+      ]
+    }
+  ]
+}

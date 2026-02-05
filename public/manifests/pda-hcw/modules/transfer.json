@@ -1,0 +1,675 @@
+{
+  "id": "transfer",
+  "name": "耗材调拨模块",
+  "description": "PDA 动作型移库单功能，支持条码/RFID扫描耗材，按源中心库+子码聚合展示，一次提交后端按源中心库拆分移库单",
+  "code_refs": [
+    {
+      "file": "/Users/dm/code/PDA/app/src/main/java/com/pda/hcw/ConsumableTransferActivity.java"
+    }
+  ],
+  "flows": [
+    {
+      "id": "transfer_main_flow",
+      "name": "耗材移库主流程",
+      "description": "从选择目标中心库到提交移库单的完整流程",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "146-155, 361-429"
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "选择目标中心库",
+          "description": "从下拉列表选择启用中的中心库作为移库目标"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "扫描耗材",
+          "description": "通过条码扫描或RFID扫描添加耗材到移库单"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "预览聚合",
+          "description": "调用API预览移库信息，按源中心库+子码聚合展示"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "提交移库",
+          "description": "构造请求体提交移库，后端按源中心库拆分移库单"
+        }
+      ]
+    },
+    {
+      "id": "barcode_scan_flow",
+      "name": "条码扫描流程",
+      "description": "通过条码输入框扫描耗材条码",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "201-274"
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "监听输入",
+          "description": "监听IME_ACTION_DONE或回车键事件"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "校验前置条件",
+          "description": "检查是否已选择目标中心库"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "校验条码格式",
+          "description": "使用BarcodeValidator校验条码格式"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "调用预览API",
+          "description": "调用previewTransferByBarcode获取移库预览信息"
+        }
+      ]
+    },
+    {
+      "id": "rfid_scan_flow",
+      "name": "RFID扫描流程",
+      "description": "通过UHF RFID批量扫描耗材标签",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "472-682"
+      },
+      "steps": [
+        {
+          "id": "step_1",
+          "order": 1,
+          "name": "初始化RFID",
+          "description": "获取UHFManager单例并初始化"
+        },
+        {
+          "id": "step_2",
+          "order": 2,
+          "name": "配置检查",
+          "description": "检查sdCode和货柜ID配置"
+        },
+        {
+          "id": "step_3",
+          "order": 3,
+          "name": "启动扫描",
+          "description": "设置Gen2session，启动异步读取和轮询"
+        },
+        {
+          "id": "step_4",
+          "order": 4,
+          "name": "轮询读取",
+          "description": "每200ms轮询一次，优先实时读取，失败则定时读取"
+        },
+        {
+          "id": "step_5",
+          "order": 5,
+          "name": "处理标签",
+          "description": "解析EPC，去重，调用预览API"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule_center_required",
+      "name": "目标中心库必选",
+      "description": "扫描耗材或提交移库前必须先选择目标中心库",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "217-218, 254-256, 362-365, 485-488"
+      },
+      "condition": "selectedCenterId == null",
+      "action": "showError(getString(R.string.transfer_select_center_first))",
+      "priority": "medium",
+      "constraints": [
+        "selectedCenterId == null"
+      ],
+      "effects": [
+        "showError(getString(R.string.transfer_select_center_first))"
+      ]
+    },
+    {
+      "id": "rule_center_filter",
+      "name": "中心库过滤规则",
+      "description": "仅显示启用中的中心库类型地点",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "169-175"
+      },
+      "conditions": [
+        "serverId != null && serverId > 0",
+        "type == 'center' (忽略大小写)",
+        "isActive == true"
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "rule_barcode_validation",
+      "name": "条码格式校验",
+      "description": "使用BarcodeValidator校验条码格式",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "246-252"
+      },
+      "condition": "!validator.validateBarcode(barcode)",
+      "action": "showError(validator.getInvalidBarcodeMessage())",
+      "priority": "medium",
+      "constraints": [
+        "!validator.validateBarcode(barcode)"
+      ],
+      "effects": [
+        "showError(validator.getInvalidBarcodeMessage())"
+      ]
+    },
+    {
+      "id": "rule_rfid_duplicate",
+      "name": "RFID去重规则",
+      "description": "同一RFID在本次移库单中只能添加一次",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "277-283, 651"
+      },
+      "conditions": [
+        "selectedByRfid.containsKey(rfid) -> 显示已在当前移库单中",
+        "seenEpcsThisRun.add(rfid18) -> 本轮扫描去重"
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "rule_rfid_config_required",
+      "name": "RFID配置必填",
+      "description": "启动RFID扫描前必须配置sdCode和货柜ID",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "501-519"
+      },
+      "conditions": [
+        "sd_code不能为空",
+        "cabinetId必须大于0"
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "rule_submit_validation",
+      "name": "提交前校验",
+      "description": "提交移库单前的校验规则",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "362-374"
+      },
+      "conditions": [
+        "selectedCenterId != null (必须选择目标中心库)",
+        "!selectedByRfid.isEmpty() (必须有待移库耗材)",
+        "currentUser != null (用户必须已登录)"
+      ],
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "rule_group_aggregation",
+      "name": "聚合规则",
+      "description": "按源中心库ID+子码聚合展示",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "288-289"
+      },
+      "key_format": "fromLocationId + '#' + code",
+      "priority": "medium",
+      "constraints": [],
+      "effects": []
+    },
+    {
+      "id": "rule_rfid_auto_restart",
+      "name": "RFID自动重启规则",
+      "description": "连续4轮空读后自动重启RFID读取",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "606-616"
+      },
+      "condition": "emptyReadRounds >= 4",
+      "action": "asyncStopReading -> sleep(30ms) -> asyncStartReading",
+      "priority": "medium",
+      "constraints": [
+        "emptyReadRounds >= 4"
+      ],
+      "effects": [
+        "asyncStopReading -> sleep(30ms) -> asyncStartReading"
+      ]
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "rfid_state_machine",
+      "name": "RFID扫描状态机",
+      "description": "RFID扫描的启动/停止状态管理",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "94, 484-498, 532-572, 574-592"
+      },
+      "states": [
+        {
+          "id": "idle",
+          "name": "空闲",
+          "description": "RFID未激活，isRFIDActive=false"
+        },
+        {
+          "id": "scanning",
+          "name": "扫描中",
+          "description": "RFID激活中，isRFIDActive=true，轮询线程运行"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "idle",
+          "to": "scanning",
+          "trigger": "toggleRFIDScanning() when !isRFIDActive"
+        },
+        {
+          "from": "scanning",
+          "to": "idle",
+          "trigger": "toggleRFIDScanning() when isRFIDActive"
+        },
+        {
+          "from": "scanning",
+          "to": "idle",
+          "trigger": "onPause() / onDestroy()"
+        }
+      ],
+      "entity": "RFID扫描状态机",
+      "field": "status"
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "pseudo_add_or_update_group",
+      "name": "addOrUpdateGroup",
+      "description": "添加或更新聚合分组",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "276-321"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "IF src为空 OR src.rfid为空 THEN RETURN",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "rfid = src.rfid.trim()",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "IF rfid已在selectedByRfid中 THEN",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "显示'该耗材已在当前移库单中'",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "RETURN",
+          "type": "return"
+        },
+        {
+          "indent": 0,
+          "text": "END IF",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "将rfid加入selectedByRfid",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "key = fromLocationId + '#' + code",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "IF key不在groupMap中 THEN",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "创建新的TransferGroupItem",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "加入groupMap和groupList头部",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "通知适配器插入",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "END IF",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "group.quantity++",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "group.rfids.add(rfid)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "通知适配器更新",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "totalCount++",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "更新汇总显示",
+          "type": "action"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "pseudo_submit_transfer",
+      "name": "submitTransfer",
+      "description": "提交移库单",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "361-429"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "校验: selectedCenterId不为空",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "校验: selectedByRfid不为空",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "校验: 用户已登录",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "构造请求体:",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "- to_location_id: 目标中心库ID",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "- rfid_list: RFID列表",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "- operator_id: 操作员ID",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "- device_id: 设备ID",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "POST请求到 TRANSFER_SUBMIT_FROM_PDA",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "IF status == 200 THEN",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "显示成功(成功数量, 订单数量)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "清空所有数据",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "ELSE",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "显示错误信息",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "END IF",
+          "type": "action"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "pseudo_handle_rfid_tag",
+      "name": "handleRfidTag",
+      "description": "处理RFID标签",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "640-682"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "epcHex = 字节转十六进制(tag.EpcId)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "IF epcHex为空 THEN RETURN",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "IF beepModeRaw THEN 请求蜂鸣",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "rfid18 = EpcFormatter.normalizeOnReceive(epcHex)",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "IF rfid18为空 THEN RETURN",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "IF rfid18已在seenEpcsThisRun中 THEN RETURN (本轮去重)",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "将rfid18加入seenEpcsThisRun",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "IF selectedCenterId为空 THEN RETURN",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "调用previewTransferByRfid API",
+          "type": "call"
+        },
+        {
+          "indent": 1,
+          "text": "成功: addOrUpdateGroup(result)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "失败: 显示错误",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "更新EPC滚动列表UI",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "IF !beepModeRaw THEN 请求蜂鸣 (业务模式)",
+          "type": "condition"
+        }
+      ],
+      "calls": []
+    },
+    {
+      "id": "pseudo_rfid_polling",
+      "name": "startRFIDPolling",
+      "description": "RFID轮询逻辑",
+      "code_ref": {
+        "file": "ConsumableTransferActivity.java",
+        "lines": "594-627"
+      },
+      "steps": [
+        {
+          "indent": 0,
+          "text": "LOOP (每200ms):",
+          "type": "loop"
+        },
+        {
+          "indent": 1,
+          "text": "IF !isRFIDActive OR uhfManager未初始化 THEN RETURN",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "tagList = uhfManager.tagInventoryRealTime()",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "IF tagList为空 THEN",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "tagList = uhfManager.tagInventoryByTimer(50ms)",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "END IF",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "IF tagList为空 THEN",
+          "type": "condition"
+        },
+        {
+          "indent": 2,
+          "text": "emptyReadRounds++",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "IF emptyReadRounds >= 4 THEN",
+          "type": "condition"
+        },
+        {
+          "indent": 3,
+          "text": "重启RFID读取(stop -> sleep 30ms -> start)",
+          "type": "action"
+        },
+        {
+          "indent": 3,
+          "text": "emptyReadRounds = 0",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "END IF",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "ELSE",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "emptyReadRounds = 0",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "FOR EACH tag IN tagList:",
+          "type": "loop"
+        },
+        {
+          "indent": 3,
+          "text": "handleRfidTag(tag)",
+          "type": "action"
+        },
+        {
+          "indent": 2,
+          "text": "END FOR",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "END IF",
+          "type": "action"
+        },
+        {
+          "indent": 1,
+          "text": "IF isRFIDActive THEN 延迟200ms后继续轮询",
+          "type": "condition"
+        }
+      ],
+      "calls": []
+    }
+  ]
+}

@@ -1,0 +1,466 @@
+{
+  "id": "cabinet",
+  "name": "货柜管理",
+  "description": "货柜和货柜组的增删改查管理，包括主副柜设置、货柜组与SPD仓库绑定",
+  "code_refs": [
+    { "file": "scripts/hv3/cabinet/cabinet.js" },
+    { "file": "scripts/hv3/cabinet/cabinet_group.js" },
+    { "file": "apis/hv3/cabinet.http.yao" },
+    { "file": "models/hv3/cabinet/cabinet.mod.yao" },
+    { "file": "models/hv3/cabinet/smart_cabinet_bind.mod.yao" }
+  ],
+  "flows": [
+    {
+      "id": "cabinet.add",
+      "name": "批量添加货柜",
+      "description": "批量创建货柜记录，校验必填字段和唯一性约束",
+      "trigger": "POST /api/hv3/cabinet/batchAddCabinetInfo",
+      "steps": [
+        { "id": "step1", "order": 1, "name": "校验 cabinetList 数组参数" },
+        { "id": "step2", "order": 2, "name": "遍历校验必填字段（cabinetGroupID、name、ipAddress、macAddress）" },
+        { "id": "step3", "order": 3, "name": "调用 models.hv3.cabinet.cabinet.Save 创建记录，默认 type=secondary, status=offline" },
+        { "id": "step4", "order": 4, "name": "返回创建结果（成功数量和数据）" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "addCabinet",
+        "lines": "7-82"
+      }
+    },
+    {
+      "id": "cabinet.update",
+      "name": "更新货柜信息",
+      "description": "根据ID更新货柜信息",
+      "trigger": "POST /api/hv3/cabinet/updateCabinetInfoByID",
+      "steps": [
+        { "id": "step1", "order": 1, "name": "校验货柜ID参数" },
+        { "id": "step2", "order": 2, "name": "查询货柜是否存在" },
+        { "id": "step3", "order": 3, "name": "构建更新字段（cabinetGroupID、name、type、status、ipAddress、macAddress）" },
+        { "id": "step4", "order": 4, "name": "调用 models.hv3.cabinet.cabinet.Update 更新记录" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "updateCabinetInfoByID",
+        "lines": "129-168"
+      }
+    },
+    {
+      "id": "cabinet.delete",
+      "name": "删除货柜",
+      "description": "删除货柜前检查是否有耗材存放",
+      "trigger": "GET /api/hv3/cabinet/deleteCabinetByID",
+      "steps": [
+        { "id": "step1", "order": 1, "name": "校验货柜ID参数" },
+        { "id": "step2", "order": 2, "name": "查询货柜是否存在" },
+        { "id": "step3", "order": 3, "name": "查询库存表检查是否有耗材", "rules": ["rule_delete_check_inventory"] },
+        { "id": "step4", "order": 4, "name": "调用 models.hv3.cabinet.cabinet.Destroy 删除" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "deleteCabinet",
+        "lines": "171-220"
+      }
+    },
+    {
+      "id": "cabinet.set_main",
+      "name": "设置主柜",
+      "description": "将指定货柜设为主柜，其他主柜降为副柜",
+      "trigger": "GET /api/hv3/cabinet/setAsMainCabinet",
+      "steps": [
+        { "id": "step1", "order": 1, "name": "校验 newMainCabinetId 参数" },
+        { "id": "step2", "order": 2, "name": "将现有主柜（type=main）更新为副柜（type=secondary）" },
+        { "id": "step3", "order": 3, "name": "将目标货柜更新为主柜（type=main）" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "setMainCabinet",
+        "lines": "223-256"
+      }
+    },
+    {
+      "id": "cabinet_group.create",
+      "name": "创建货柜组",
+      "description": "创建新的货柜组",
+      "trigger": "POST /api/hv3/cabinet/createCabinetGroup",
+      "steps": [
+        { "id": "step1", "order": 1, "name": "校验货柜组名称不能为空" },
+        { "id": "step2", "order": 2, "name": "调用 models.hv3.cabinet.smart_cabinet_bind.Create 创建记录" },
+        { "id": "step3", "order": 3, "name": "返回新创建的货柜组信息" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "createCabinetGroup",
+        "lines": "30-53"
+      }
+    },
+    {
+      "id": "cabinet_group.update",
+      "name": "更新货柜组",
+      "description": "更新货柜组信息，处理SPD仓库绑定变更",
+      "trigger": "POST /api/hv3/cabinet/updateCabinetGroup",
+      "steps": [
+        { "id": "step1", "order": 1, "name": "获取现有货柜组记录" },
+        { "id": "step2", "order": 2, "name": "若不存在则创建新货柜组" },
+        { "id": "step3", "order": 3, "name": "检测 rpId 是否变更" },
+        { "id": "step4", "order": 4, "name": "若变更：先解绑旧SPD仓库", "rules": ["rule_spd_unbind"] },
+        { "id": "step5", "order": 5, "name": "若变更：再绑定新SPD仓库", "rules": ["rule_spd_bind"] },
+        { "id": "step6", "order": 6, "name": "更新数据库字段" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "updateCabinetGroup",
+        "lines": "56-112"
+      }
+    },
+    {
+      "id": "cabinet_group.delete",
+      "name": "删除货柜组",
+      "description": "删除货柜组，同时解绑SPD仓库",
+      "trigger": "GET /api/hv3/cabinet/deleteCabinetGroup",
+      "steps": [
+        { "id": "step1", "order": 1, "name": "校验货柜组ID参数" },
+        { "id": "step2", "order": 2, "name": "查询货柜组是否存在" },
+        { "id": "step3", "order": 3, "name": "解绑SPD仓库（失败不阻塞删除）" },
+        { "id": "step4", "order": 4, "name": "调用 Delete 删除货柜组" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "deleteCabinetGroup",
+        "lines": "115-142"
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule_cabinet_list_format",
+      "name": "货柜列表格式校验",
+      "description": "批量添加时必须提供 cabinetList 数组",
+      "priority": "high",
+      "condition": "!params.cabinetList || !Array.isArray(params.cabinetList)",
+      "effect": "返回400错误：参数格式错误：缺少cabinetList数组",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "addCabinet",
+        "lines": "10-17"
+      }
+    },
+    {
+      "id": "rule_add_required_fields",
+      "name": "添加货柜必填字段校验",
+      "description": "添加货柜时必须提供 cabinetGroupID、name、ipAddress、macAddress",
+      "priority": "high",
+      "condition": "!cabinet.cabinetGroupID || !cabinet.name || !cabinet.ipAddress || !cabinet.macAddress",
+      "effect": "返回400错误：货柜信息缺少必填字段",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "addCabinet",
+        "lines": "25-37"
+      }
+    },
+    {
+      "id": "rule_unique_ip_mac",
+      "name": "IP/MAC地址唯一性约束",
+      "description": "货柜的IP地址和MAC地址必须唯一",
+      "priority": "high",
+      "condition": "e.message.includes('UNIQUE constraint failed')",
+      "effect": "返回409错误：货柜IP或MAC地址已存在",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "addCabinet",
+        "lines": "65-72"
+      }
+    },
+    {
+      "id": "rule_update_id_required",
+      "name": "更新货柜ID必填",
+      "description": "更新货柜时必须提供货柜ID",
+      "priority": "high",
+      "condition": "!params.id",
+      "effect": "返回400错误：请选择要修改的货柜",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "updateCabinetInfoByID",
+        "lines": "132-134"
+      }
+    },
+    {
+      "id": "rule_cabinet_exist_check",
+      "name": "货柜存在性校验",
+      "description": "更新或删除货柜前必须检查货柜是否存在",
+      "priority": "high",
+      "condition": "!cabinet || cabinet.length === 0",
+      "effect": "返回404错误：货柜不存在",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "updateCabinetInfoByID",
+        "lines": "145-147"
+      }
+    },
+    {
+      "id": "rule_delete_check_inventory",
+      "name": "删除货柜前检查耗材",
+      "description": "删除货柜前必须检查是否有耗材存放",
+      "priority": "high",
+      "condition": "inventory.length > 0",
+      "effect": "返回404错误：当前货柜有耗材存放，不能删除",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "deleteCabinet",
+        "lines": "193-200"
+      }
+    },
+    {
+      "id": "rule_group_name_required",
+      "name": "货柜组名称必填",
+      "description": "创建货柜组时名称不能为空",
+      "priority": "high",
+      "condition": "!params.name || !params.name.trim()",
+      "effect": "返回400错误：货柜组名称不能为空",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "createCabinetGroup",
+        "lines": "32-34"
+      }
+    },
+    {
+      "id": "rule_group_id_required",
+      "name": "删除货柜组ID必填",
+      "description": "删除货柜组时必须提供ID",
+      "priority": "high",
+      "condition": "!id",
+      "effect": "返回400错误：请传入货柜组ID",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "deleteCabinetGroup",
+        "lines": "117-119"
+      }
+    },
+    {
+      "id": "rule_group_exist_check",
+      "name": "货柜组存在性校验",
+      "description": "删除货柜组前必须检查是否存在",
+      "priority": "high",
+      "condition": "!group",
+      "effect": "返回404错误：货柜组不存在",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "deleteCabinetGroup",
+        "lines": "122-124"
+      }
+    },
+    {
+      "id": "rule_valid_rpid",
+      "name": "有效仓库ID校验",
+      "description": "判断rpId是否有效（非空、非0）",
+      "priority": "medium",
+      "condition": "rpId && rpId !== '' && rpId !== '0' && rpId !== 0",
+      "effect": "执行仓库绑定/解绑操作",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "isValidRpId",
+        "lines": "14-16"
+      }
+    },
+    {
+      "id": "rule_spd_unbind",
+      "name": "SPD仓库解绑规则",
+      "description": "更换SPD仓库时必须先解绑旧仓库",
+      "priority": "medium",
+      "condition": "rpIdChanged && isValidRpId(oldRpId)",
+      "effect": "调用 scripts.hv3.spd.spd.unbindRepository 解绑",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "updateCabinetGroup",
+        "lines": "73-78"
+      }
+    },
+    {
+      "id": "rule_spd_bind",
+      "name": "SPD仓库绑定规则",
+      "description": "更换SPD仓库时解绑后绑定新仓库",
+      "priority": "medium",
+      "condition": "rpIdChanged && isValidRpId(newRpId)",
+      "effect": "调用 scripts.hv3.spd.spd.bindRepository 绑定",
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "updateCabinetGroup",
+        "lines": "80-89"
+      }
+    }
+  ],
+  "state_machines": [
+    {
+      "id": "sm_cabinet_type",
+      "name": "货柜类型",
+      "description": "货柜的主副柜类型",
+      "entity": "cabinet",
+      "field": "type",
+      "states": [
+        { "id": "main", "name": "主柜", "description": "主控货柜" },
+        { "id": "secondary", "name": "副柜", "description": "从属货柜", "is_initial": true }
+      ],
+      "transitions": [
+        { "from": "secondary", "to": "main", "trigger": "setMainCabinet", "description": "通过 setMainCabinet 设置为主柜" },
+        { "from": "main", "to": "secondary", "trigger": "setMainCabinet", "description": "其他货柜被设为主柜时降为副柜" }
+      ],
+      "code_ref": {
+        "file": "models/hv3/cabinet/cabinet.mod.yao",
+        "lines": "28-34"
+      }
+    },
+    {
+      "id": "sm_cabinet_status",
+      "name": "货柜在线状态",
+      "description": "货柜的在线/离线状态",
+      "entity": "cabinet",
+      "field": "status",
+      "states": [
+        { "id": "online", "name": "在线", "description": "货柜在线可用" },
+        { "id": "offline", "name": "离线", "description": "货柜离线", "is_initial": true }
+      ],
+      "transitions": [],
+      "code_ref": {
+        "file": "models/hv3/cabinet/cabinet.mod.yao",
+        "lines": "36-44"
+      }
+    }
+  ],
+  "pseudocodes": [
+    {
+      "id": "pc_add_cabinet",
+      "name": "addCabinet",
+      "description": "批量添加货柜的完整逻辑",
+      "params": ["params: {cabinetList: Array}"],
+      "returns": "操作结果（成功数量和数据）",
+      "steps": [
+        { "indent": 0, "text": "// 批量添加货柜", "type": "comment" },
+        { "indent": 0, "text": "if (!params.cabinetList || !Array.isArray(params.cabinetList))", "type": "condition" },
+        { "indent": 1, "text": "return Error(400, '参数格式错误：缺少cabinetList数组')", "type": "error" },
+        { "indent": 0, "text": "for each cabinet in params.cabinetList:", "type": "loop" },
+        { "indent": 1, "text": "if (!cabinetGroupID || !name || !ipAddress || !macAddress)", "type": "condition" },
+        { "indent": 2, "text": "return Error(400, '货柜信息缺少必填字段')", "type": "error" },
+        { "indent": 1, "text": "result = models.hv3.cabinet.cabinet.Save({...cabinet, type:'secondary', status:'offline'})", "type": "call" },
+        { "indent": 0, "text": "catch (e):", "type": "condition" },
+        { "indent": 1, "text": "if (UNIQUE constraint failed) return Error(409, 'IP或MAC地址已存在')", "type": "error" },
+        { "indent": 0, "text": "return Success(count, data)", "type": "return" }
+      ],
+      "calls": [
+        { "name": "models.hv3.cabinet.cabinet.Save", "type": "db", "table": "cabinet" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "addCabinet",
+        "lines": "7-82"
+      }
+    },
+    {
+      "id": "pc_delete_cabinet",
+      "name": "deleteCabinet",
+      "description": "删除货柜的完整逻辑",
+      "params": ["id: 货柜ID"],
+      "returns": "操作结果",
+      "steps": [
+        { "indent": 0, "text": "// 删除货柜前检查是否有耗材", "type": "comment" },
+        { "indent": 0, "text": "if (!id) throw Error('缺少必要字段')", "type": "condition" },
+        { "indent": 0, "text": "cabinet = models.hv3.cabinet.cabinet.Get({id})", "type": "call" },
+        { "indent": 0, "text": "if (!cabinet) throw Error('货柜不存在')", "type": "condition" },
+        { "indent": 0, "text": "inventory = models.hv3.stock.inventory.Get({cabinetID: id})", "type": "call" },
+        { "indent": 0, "text": "if (inventory.length > 0)", "type": "condition" },
+        { "indent": 1, "text": "return Error('当前货柜有耗材存放，不能删除')", "type": "error" },
+        { "indent": 0, "text": "models.hv3.cabinet.cabinet.Destroy(id)", "type": "call" },
+        { "indent": 0, "text": "return Success", "type": "return" }
+      ],
+      "calls": [
+        { "name": "models.hv3.cabinet.cabinet.Get", "type": "db", "table": "cabinet" },
+        { "name": "models.hv3.stock.inventory.Get", "type": "db", "table": "inventory" },
+        { "name": "models.hv3.cabinet.cabinet.Destroy", "type": "db", "table": "cabinet" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "deleteCabinet",
+        "lines": "171-220"
+      }
+    },
+    {
+      "id": "pc_set_main_cabinet",
+      "name": "setMainCabinet",
+      "description": "设置主柜的完整逻辑",
+      "params": ["newMainCabinetId: 新主柜ID"],
+      "returns": "操作结果",
+      "steps": [
+        { "indent": 0, "text": "// 设置主柜，原主柜降级", "type": "comment" },
+        { "indent": 0, "text": "if (!newMainCabinetId) throw Error('缺少必要字段')", "type": "condition" },
+        { "indent": 0, "text": "models.hv3.cabinet.cabinet.updatewhere({type:'main'}, {type:'secondary'})", "type": "call" },
+        { "indent": 0, "text": "models.hv3.cabinet.cabinet.update(newMainCabinetId, {type:'main'})", "type": "call" },
+        { "indent": 0, "text": "return Success", "type": "return" }
+      ],
+      "calls": [
+        { "name": "models.hv3.cabinet.cabinet.updatewhere", "type": "db", "table": "cabinet" },
+        { "name": "models.hv3.cabinet.cabinet.update", "type": "db", "table": "cabinet" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet.js",
+        "function": "setMainCabinet",
+        "lines": "223-256"
+      }
+    },
+    {
+      "id": "pc_update_cabinet_group",
+      "name": "updateCabinetGroup",
+      "description": "更新货柜组并处理SPD仓库绑定",
+      "params": ["params: {id, name, rpId, rpName, sdIp, ...}"],
+      "returns": "更新后的货柜组信息",
+      "steps": [
+        { "indent": 0, "text": "// 更新货柜组，处理SPD仓库变更", "type": "comment" },
+        { "indent": 0, "text": "group = getCabinetGroup(params.id)", "type": "call" },
+        { "indent": 0, "text": "if (!group) return createCabinetGroup(params)", "type": "condition" },
+        { "indent": 0, "text": "oldRpId = normalizeRpId(group.rpId)", "type": "action" },
+        { "indent": 0, "text": "newRpId = normalizeRpId(params.rpId)", "type": "action" },
+        { "indent": 0, "text": "if (oldRpId !== newRpId)", "type": "condition" },
+        { "indent": 1, "text": "if (isValidRpId(oldRpId)) spd.unbindRepository(oldRpId)", "type": "call" },
+        { "indent": 1, "text": "if (isValidRpId(newRpId)) spd.bindRepository(newRpId, ...)", "type": "call" },
+        { "indent": 0, "text": "models.hv3.cabinet.smart_cabinet_bind.update(group.id, updateFields)", "type": "call" },
+        { "indent": 0, "text": "return updatedInfo", "type": "return" }
+      ],
+      "calls": [
+        { "name": "getCabinetGroup", "type": "internal" },
+        { "name": "scripts.hv3.spd.spd.unbindRepository", "type": "api", "description": "解绑SPD仓库" },
+        { "name": "scripts.hv3.spd.spd.bindRepository", "type": "api", "description": "绑定SPD仓库" },
+        { "name": "models.hv3.cabinet.smart_cabinet_bind.update", "type": "db", "table": "SmartCabinetBinding" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "updateCabinetGroup",
+        "lines": "56-112"
+      }
+    },
+    {
+      "id": "pc_delete_cabinet_group",
+      "name": "deleteCabinetGroup",
+      "description": "删除货柜组的完整逻辑",
+      "params": ["id: 货柜组ID"],
+      "returns": "操作结果",
+      "steps": [
+        { "indent": 0, "text": "// 删除货柜组，解绑SPD仓库", "type": "comment" },
+        { "indent": 0, "text": "if (!id) return Error(400, '请传入货柜组ID')", "type": "condition" },
+        { "indent": 0, "text": "group = models.hv3.cabinet.smart_cabinet_bind.Find(id)", "type": "call" },
+        { "indent": 0, "text": "if (!group) return Error(404, '货柜组不存在')", "type": "condition" },
+        { "indent": 0, "text": "rpId = normalizeRpId(group.rpId)", "type": "action" },
+        { "indent": 0, "text": "if (isValidRpId(rpId))", "type": "condition" },
+        { "indent": 1, "text": "try: spd.unbindRepository(rpId)  // 失败不阻塞删除", "type": "call" },
+        { "indent": 0, "text": "models.hv3.cabinet.smart_cabinet_bind.Delete(id)", "type": "call" },
+        { "indent": 0, "text": "return Success('删除成功')", "type": "return" }
+      ],
+      "calls": [
+        { "name": "models.hv3.cabinet.smart_cabinet_bind.Find", "type": "db", "table": "SmartCabinetBinding" },
+        { "name": "scripts.hv3.spd.spd.unbindRepository", "type": "api", "description": "解绑SPD仓库" },
+        { "name": "models.hv3.cabinet.smart_cabinet_bind.Delete", "type": "db", "table": "SmartCabinetBinding" }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/cabinet/cabinet_group.js",
+        "function": "deleteCabinetGroup",
+        "lines": "115-142"
+      }
+    }
+  ]
+}

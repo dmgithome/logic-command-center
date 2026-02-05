@@ -1,0 +1,252 @@
+{
+  "id": "outbound",
+  "name": "出库管理",
+  "description": "管理耗材取用和退库流程",
+  "tags": [
+    "核心",
+    "库存"
+  ],
+  "dependencies": [
+    "inbound"
+  ],
+  "code_refs": [
+    {
+      "file": "scripts/hv3/stock/outbound.js"
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow_return_supplier",
+      "name": "退库流程",
+      "description": "将在库耗材退回供应商",
+      "trigger": "用户发起退库操作",
+      "steps": [
+        {
+          "id": "step1",
+          "order": 1,
+          "name": "参数校验",
+          "description": "校验退库列表和用户信息",
+          "rules": [
+            "rule_return_params"
+          ]
+        },
+        {
+          "id": "step2",
+          "order": 2,
+          "name": "库存校验",
+          "description": "批量检查RFID是否可退库（状态为inStock或usedReturn）",
+          "rules": [
+            "rule_return_status"
+          ]
+        },
+        {
+          "id": "step3",
+          "order": 3,
+          "name": "记录退库日志",
+          "description": "调用operation.addInBoundAndReturnLog"
+        },
+        {
+          "id": "step4",
+          "order": 4,
+          "name": "归档库存",
+          "description": "将库存记录写入归档表"
+        },
+        {
+          "id": "step5",
+          "order": 5,
+          "name": "记录流转账本",
+          "description": "写入ReturnSupplier操作记录"
+        },
+        {
+          "id": "step6",
+          "order": 6,
+          "name": "删除库存",
+          "description": "从库存表删除已退库的记录"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/outbound.js",
+        "function": "createReturnOrder",
+        "line": 8
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule_return_params",
+      "name": "退库参数校验规则",
+      "description": "退库时必须提供退库列表、类型和用户ID",
+      "priority": "high",
+      "category": "校验",
+      "constraints": [
+        "list不能为空",
+        "type必须提供",
+        "userID必须提供"
+      ],
+      "effects": [
+        "校验失败抛出异常"
+      ],
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "operations": [
+          "D"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/outbound.js",
+        "line": 12
+      },
+      "condition": "list不能为空 && type必须提供 && userID必须提供",
+      "effect": "校验失败抛出异常"
+    },
+    {
+      "id": "rule_return_status",
+      "name": "退库状态校验规则",
+      "description": "只有状态为inStock或usedReturn的耗材才能退库",
+      "priority": "high",
+      "category": "校验",
+      "constraints": [
+        "status必须是inStock或usedReturn"
+      ],
+      "effects": [
+        "状态不符合则抛出异常"
+      ],
+      "affects": {
+        "entities": [
+          "inventory"
+        ],
+        "fields": [
+          "status"
+        ],
+        "operations": [
+          "R",
+          "D"
+        ]
+      },
+      "code_ref": {
+        "file": "scripts/hv3/stock/outbound.js",
+        "line": 42
+      },
+      "condition": "status必须是inStock或usedReturn",
+      "effect": "状态不符合则抛出异常"
+    }
+  ],
+  "state_machines": [],
+  "pseudocodes": [
+    {
+      "id": "pc_create_return_order",
+      "name": "创建退库单",
+      "description": "将在库耗材退回供应商的完整流程",
+      "params": [
+        "params: {list, type, userID, reason, target_location_id}"
+      ],
+      "returns": "退库结果 {退库单号, 退库数量}",
+      "steps": [
+        {
+          "indent": 0,
+          "text": "// 退库：将在库耗材退回供应商",
+          "type": "comment"
+        },
+        {
+          "indent": 0,
+          "text": "校验 list、type、userID 必填",
+          "type": "condition"
+        },
+        {
+          "indent": 0,
+          "text": "查询用户信息获取用户名",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "批量查询库存表，获取所有RFID的库存记录",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "校验所有RFID是否存在且状态允许退库",
+          "type": "condition"
+        },
+        {
+          "indent": 1,
+          "text": "若有不存在或状态不允许的 → 抛出异常",
+          "type": "error"
+        },
+        {
+          "indent": 0,
+          "text": "调用 operation.addInBoundAndReturnLog 记录退库日志",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "准备归档数据和流转账本数据",
+          "type": "action"
+        },
+        {
+          "indent": 0,
+          "text": "批量插入归档记录到 inventory_archive",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "批量插入流转账本到 stock_movement",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "批量删除库存记录",
+          "type": "call"
+        },
+        {
+          "indent": 0,
+          "text": "返回退库结果",
+          "type": "return"
+        }
+      ],
+      "calls": [
+        {
+          "name": "用户表.查询",
+          "type": "db",
+          "table": "admin_user",
+          "description": "获取用户信息"
+        },
+        {
+          "name": "库存表.批量查询",
+          "type": "db",
+          "table": "inventory",
+          "description": "检查RFID状态"
+        },
+        {
+          "name": "退库日志.记录",
+          "type": "internal",
+          "description": "调用operation.addInBoundAndReturnLog"
+        },
+        {
+          "name": "归档表.批量插入",
+          "type": "db",
+          "table": "inventory_archive",
+          "description": "归档库存记录"
+        },
+        {
+          "name": "库存流转账本.记录",
+          "type": "db",
+          "table": "stock_movement",
+          "description": "记录ReturnSupplier操作"
+        },
+        {
+          "name": "库存表.批量删除",
+          "type": "db",
+          "table": "inventory",
+          "description": "删除已退库记录"
+        }
+      ],
+      "code_ref": {
+        "file": "scripts/hv3/stock/outbound.js",
+        "function": "createReturnOrder",
+        "line": 8
+      }
+    }
+  ]
+}
